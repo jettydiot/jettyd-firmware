@@ -1,0 +1,110 @@
+/**
+ * @file driver_registry.c
+ * @brief Runtime driver discovery and lookup.
+ */
+
+#include "jettyd_driver.h"
+#include "esp_log.h"
+#include <string.h>
+
+static const char *TAG = "jettyd_drv";
+
+static jettyd_driver_t s_drivers[JETTYD_MAX_DRIVERS];
+static uint8_t s_driver_count = 0;
+
+esp_err_t jettyd_driver_registry_init(void)
+{
+    memset(s_drivers, 0, sizeof(s_drivers));
+    s_driver_count = 0;
+    ESP_LOGI(TAG, "Driver registry initialized");
+    return ESP_OK;
+}
+
+esp_err_t jettyd_driver_registry_add(const jettyd_driver_t *driver)
+{
+    if (driver == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (s_driver_count >= JETTYD_MAX_DRIVERS) {
+        ESP_LOGE(TAG, "Driver registry full (max %d)", JETTYD_MAX_DRIVERS);
+        return ESP_ERR_NO_MEM;
+    }
+
+    /* Check for duplicate instance name */
+    for (uint8_t i = 0; i < s_driver_count; i++) {
+        if (strcmp(s_drivers[i].instance, driver->instance) == 0) {
+            ESP_LOGE(TAG, "Duplicate instance name: %s", driver->instance);
+            return ESP_ERR_INVALID_STATE;
+        }
+    }
+
+    memcpy(&s_drivers[s_driver_count], driver, sizeof(jettyd_driver_t));
+    ESP_LOGI(TAG, "Registered driver: %s (instance: %s, caps: %d)",
+             driver->driver_name, driver->instance, driver->capability_count);
+    s_driver_count++;
+    return ESP_OK;
+}
+
+const jettyd_driver_t *jettyd_driver_find(const char *instance)
+{
+    if (instance == NULL) {
+        return NULL;
+    }
+    for (uint8_t i = 0; i < s_driver_count; i++) {
+        if (strcmp(s_drivers[i].instance, instance) == 0) {
+            return &s_drivers[i];
+        }
+    }
+    return NULL;
+}
+
+const jettyd_driver_t *jettyd_driver_find_capability(const char *dotted_name)
+{
+    if (dotted_name == NULL) {
+        return NULL;
+    }
+
+    /* Parse "instance.capability" */
+    const char *dot = strchr(dotted_name, '.');
+    if (dot == NULL) {
+        return NULL;
+    }
+
+    size_t inst_len = (size_t)(dot - dotted_name);
+    if (inst_len >= JETTYD_MAX_INSTANCE_NAME) {
+        return NULL;
+    }
+
+    char instance[JETTYD_MAX_INSTANCE_NAME];
+    memcpy(instance, dotted_name, inst_len);
+    instance[inst_len] = '\0';
+
+    const char *cap_name = dot + 1;
+
+    const jettyd_driver_t *drv = jettyd_driver_find(instance);
+    if (drv == NULL) {
+        return NULL;
+    }
+
+    /* Verify the capability exists on this driver */
+    for (uint8_t i = 0; i < drv->capability_count; i++) {
+        if (strcmp(drv->capabilities[i].name, cap_name) == 0) {
+            return drv;
+        }
+    }
+
+    return NULL;
+}
+
+uint8_t jettyd_driver_count(void)
+{
+    return s_driver_count;
+}
+
+const jettyd_driver_t *jettyd_driver_get(uint8_t index)
+{
+    if (index >= s_driver_count) {
+        return NULL;
+    }
+    return &s_drivers[index];
+}

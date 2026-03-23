@@ -1,0 +1,28 @@
+name: dht22
+description: "DHT22 (AM2302) temperature and humidity sensor"
+category: sensor
+capabilities:
+  - name: temperature
+    type: readable
+    value_type: float
+    unit: "°C"
+    description: "Air temperature (-40 to 80°C, ±0.5°C accuracy)"
+  - name: humidity
+    type: readable
+    value_type: float
+    unit: "%"
+    description: "Relative humidity (0-100%, ±2% accuracy)"
+
+config_schema:
+  pin:
+    type: int
+    required: true
+    description: "GPIO pin connected to DHT22 data line"
+
+esp_idf_components:
+  - driver
+
+compatible_targets:
+  - esp32s3
+  - esp32c3
+  - esp32c6

@@ -1,0 +1,54 @@
+name: "soil-moisture-v1"
+version: "1.0.0"
+target: "esp32s3"
+description: "Soil moisture sensor with irrigation relay"
+
+drivers:
+  - name: soil_moisture
+    instance: "soil"
+    config:
+      pin: 34
+      type: "capacitive"
+      dry_value: 4095
+      wet_value: 1200
+      unit: "%"
+
+  - name: dht22
+    instance: "air"
+    config:
+      pin: 4
+
+  - name: relay
+    instance: "valve"
+    config:
+      pin: 25
+      active_high: true
+      default_state: "off"
+      max_on_duration: 1800
+
+defaults:
+  heartbeat_interval: 60
+  report_metrics:
+    - "soil.moisture"
+    - "air.temperature"
+    - "air.humidity"
+    - "valve.state"
+    - "system.battery"
+    - "system.rssi"
+
+mqtt:
+  keepalive: 60
+  qos: 1
+  buffer_on_disconnect: true
+  max_buffer_size: 50
+
+power:
+  deep_sleep: false
+  sleep_duration: null
+  wake_on_pin: null
+
+hardware:
+  has_battery: true
+  battery_adc_pin: 35
+  battery_voltage_divider: 2.0
+  status_led_pin: 2

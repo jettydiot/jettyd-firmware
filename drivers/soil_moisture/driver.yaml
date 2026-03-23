@@ -1,0 +1,38 @@
+name: soil_moisture
+description: "Capacitive or resistive soil moisture sensor via ADC"
+category: sensor
+capabilities:
+  - name: moisture
+    type: readable
+    value_type: float
+    unit: "%"
+    description: "Soil moisture percentage (0=dry, 100=saturated)"
+
+config_schema:
+  pin:
+    type: int
+    required: true
+    description: "ADC-capable GPIO pin number"
+  type:
+    type: string
+    enum: [capacitive, resistive]
+    default: capacitive
+  dry_value:
+    type: int
+    default: 4095
+    description: "Raw ADC reading when sensor is completely dry"
+  wet_value:
+    type: int
+    default: 1200
+    description: "Raw ADC reading when sensor is submerged in water"
+  unit:
+    type: string
+    default: "%"
+
+esp_idf_components:
+  - esp_adc
+
+compatible_targets:
+  - esp32s3
+  - esp32c3
+  - esp32c6

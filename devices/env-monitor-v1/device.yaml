@@ -1,0 +1,52 @@
+name: "env-monitor-v1"
+version: "1.0.0"
+target: "esp32c3"
+description: "Environmental monitor — temperature, humidity, and soil moisture"
+
+drivers:
+  - name: dht22
+    instance: "air"
+    config:
+      pin: 4
+
+  - name: ds18b20
+    instance: "ground"
+    config:
+      pin: 5
+      resolution: 12
+
+  - name: soil_moisture
+    instance: "soil"
+    config:
+      pin: 34
+      type: "capacitive"
+      dry_value: 4095
+      wet_value: 1200
+      unit: "%"
+
+defaults:
+  heartbeat_interval: 300
+  report_metrics:
+    - "air.temperature"
+    - "air.humidity"
+    - "ground.temperature"
+    - "soil.moisture"
+    - "system.battery"
+    - "system.rssi"
+
+mqtt:
+  keepalive: 120
+  qos: 1
+  buffer_on_disconnect: true
+  max_buffer_size: 100
+
+power:
+  deep_sleep: true
+  sleep_duration: 300
+  wake_on_pin: null
+
+hardware:
+  has_battery: true
+  battery_adc_pin: 0
+  battery_voltage_divider: 2.0
+  status_led_pin: 8

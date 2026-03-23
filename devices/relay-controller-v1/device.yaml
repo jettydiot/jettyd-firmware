@@ -1,0 +1,63 @@
+name: "relay-controller-v1"
+version: "1.0.0"
+target: "esp32c6"
+description: "4-channel relay controller for irrigation or HVAC"
+
+drivers:
+  - name: relay
+    instance: "ch1"
+    config:
+      pin: 4
+      active_high: true
+      default_state: "off"
+      max_on_duration: 3600
+
+  - name: relay
+    instance: "ch2"
+    config:
+      pin: 5
+      active_high: true
+      default_state: "off"
+      max_on_duration: 3600
+
+  - name: relay
+    instance: "ch3"
+    config:
+      pin: 6
+      active_high: true
+      default_state: "off"
+      max_on_duration: 3600
+
+  - name: relay
+    instance: "ch4"
+    config:
+      pin: 7
+      active_high: true
+      default_state: "off"
+      max_on_duration: 3600
+
+defaults:
+  heartbeat_interval: 30
+  report_metrics:
+    - "ch1.state"
+    - "ch2.state"
+    - "ch3.state"
+    - "ch4.state"
+    - "system.rssi"
+
+mqtt:
+  keepalive: 30
+  qos: 1
+  buffer_on_disconnect: true
+  max_buffer_size: 20
+
+power:
+  deep_sleep: false
+  sleep_duration: null
+  wake_on_pin: null
+
+hardware:
+  has_battery: false
+  battery_adc_pin: -1
+  battery_voltage_divider: 1.0
+  status_led_pin: 15

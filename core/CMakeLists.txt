@@ -1,0 +1,31 @@
+idf_component_register(
+    SRCS
+        "src/jettyd.c"
+        "src/mqtt.c"
+        "src/ota.c"
+        "src/provision.c"
+        "src/shadow.c"
+        "src/nvs.c"
+        "src/wifi.c"
+        "src/telemetry.c"
+        "src/vm.c"
+        "src/driver_registry.c"
+    INCLUDE_DIRS
+        "include"
+    REQUIRES
+        nvs_flash
+        esp_wifi
+        esp_event
+        esp_netif
+        mqtt
+        esp_https_ota
+        esp_http_client
+        json
+        mbedtls
+        esp_timer
+        esp_system
+        freertos
+        driver
+        esp_ota_ops
+        app_update
+)

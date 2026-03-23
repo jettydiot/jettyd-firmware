@@ -1,0 +1,28 @@
+name: ds18b20
+description: "DS18B20 waterproof digital temperature sensor (Dallas 1-Wire)"
+category: sensor
+capabilities:
+  - name: temperature
+    type: readable
+    value_type: float
+    unit: "°C"
+    description: "Temperature (-55 to 125°C, ±0.5°C accuracy at 12-bit)"
+
+config_schema:
+  pin:
+    type: int
+    required: true
+    description: "GPIO pin for 1-Wire data line (needs 4.7kΩ pull-up)"
+  resolution:
+    type: int
+    enum: [9, 10, 11, 12]
+    default: 12
+    description: "ADC resolution in bits (9=fastest, 12=most precise)"
+
+esp_idf_components:
+  - driver
+
+compatible_targets:
+  - esp32s3
+  - esp32c3
+  - esp32c6
