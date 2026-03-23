@@ -1,0 +1,14 @@
+{
+  "name": "@jettyd/firmware-tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "safety-review": "node tools/safety-review.js",
+    "safety-review:all": "node tools/safety-review.js --all"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "glob": "^11.0.0"
+  }
+}
