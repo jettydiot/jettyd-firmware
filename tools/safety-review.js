@@ -1,3 +1,4 @@
+// Safety review — retrigger after API key refresh
 #!/usr/bin/env node
 /**
  * Firmware Safety Review Agent
