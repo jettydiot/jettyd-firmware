@@ -1,0 +1,35 @@
+name: pwm_output
+description: "LEDC PWM output driver with 0-100% duty cycle control"
+category: actuator
+capabilities:
+  - name: duty
+    type: writable
+    value_type: float
+    unit: "%"
+    description: "PWM duty cycle percentage (0-100)"
+
+config_schema:
+  gpio_pin:
+    type: int
+    required: true
+    description: "GPIO pin for PWM output"
+  frequency_hz:
+    type: int
+    default: 1000
+    description: "PWM frequency in Hz"
+  ledc_channel:
+    type: int
+    required: true
+    description: "LEDC channel number"
+  ledc_timer:
+    type: int
+    required: true
+    description: "LEDC timer number"
+
+esp_idf_components:
+  - driver
+
+compatible_targets:
+  - esp32s3
+  - esp32c3
+  - esp32c6

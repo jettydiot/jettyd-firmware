@@ -1,0 +1,49 @@
+name: ina219
+description: "INA219 I2C voltage, current, and power monitor"
+category: sensor
+capabilities:
+  - name: voltage
+    type: readable
+    value_type: float
+    unit: "V"
+    description: "Bus voltage in volts"
+  - name: current
+    type: readable
+    value_type: float
+    unit: "A"
+    description: "Current in amperes"
+  - name: power
+    type: readable
+    value_type: float
+    unit: "W"
+    description: "Power in watts"
+
+config_schema:
+  i2c_port:
+    type: int
+    required: true
+    description: "I2C port number"
+  sda_pin:
+    type: int
+    required: true
+    description: "SDA GPIO pin"
+  scl_pin:
+    type: int
+    required: true
+    description: "SCL GPIO pin"
+  i2c_addr:
+    type: int
+    default: 0x40
+    description: "I2C device address"
+  shunt_resistance_mohm:
+    type: int
+    default: 100
+    description: "Shunt resistance in milliohms"
+
+esp_idf_components:
+  - driver
+
+compatible_targets:
+  - esp32s3
+  - esp32c3
+  - esp32c6

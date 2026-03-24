@@ -1,0 +1,49 @@
+name: bme280
+description: "BME280 I2C temperature, humidity, and pressure sensor"
+category: sensor
+capabilities:
+  - name: temperature
+    type: readable
+    value_type: float
+    unit: "C"
+    description: "Ambient temperature in degrees Celsius"
+  - name: humidity
+    type: readable
+    value_type: float
+    unit: "%"
+    description: "Relative humidity percentage"
+  - name: pressure
+    type: readable
+    value_type: float
+    unit: "hPa"
+    description: "Barometric pressure in hectopascals"
+
+config_schema:
+  i2c_port:
+    type: int
+    required: true
+    description: "I2C port number"
+  sda_pin:
+    type: int
+    required: true
+    description: "SDA GPIO pin"
+  scl_pin:
+    type: int
+    required: true
+    description: "SCL GPIO pin"
+  i2c_addr:
+    type: int
+    default: 0x76
+    description: "I2C device address"
+  oversampling:
+    type: int
+    default: 1
+    description: "Oversampling setting (1-5, maps to x1-x16)"
+
+esp_idf_components:
+  - driver
+
+compatible_targets:
+  - esp32s3
+  - esp32c3
+  - esp32c6

@@ -1,0 +1,28 @@
+name: hcsr04
+description: "HC-SR04 ultrasonic distance sensor via GPIO trigger/echo"
+category: sensor
+capabilities:
+  - name: distance
+    type: readable
+    value_type: float
+    unit: "cm"
+    description: "Distance measurement in centimeters"
+
+config_schema:
+  trigger_pin:
+    type: int
+    required: true
+    description: "GPIO pin for trigger pulse output"
+  echo_pin:
+    type: int
+    required: true
+    description: "GPIO pin for echo pulse input"
+
+esp_idf_components:
+  - driver
+  - esp_timer
+
+compatible_targets:
+  - esp32s3
+  - esp32c3
+  - esp32c6

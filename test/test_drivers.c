@@ -168,6 +168,134 @@ TEST(find_null_inputs) {
     ASSERT_NULL(jettyd_driver_find_capability("nodot"));
 }
 
+/* ───────────────────────────── P1 Driver Tests ────────────────────────────── */
+
+static jettyd_driver_t make_multi_cap_driver(const char *instance, const char *name,
+                                              const char **cap_names,
+                                              jettyd_capability_type_t cap_type,
+                                              int cap_count)
+{
+    jettyd_driver_t drv = {0};
+    strncpy(drv.instance, instance, JETTYD_MAX_INSTANCE_NAME - 1);
+    strncpy(drv.driver_name, name, sizeof(drv.driver_name) - 1);
+    drv.capability_count = (uint8_t)cap_count;
+    for (int i = 0; i < cap_count && i < JETTYD_MAX_CAPABILITIES; i++) {
+        strncpy(drv.capabilities[i].name, cap_names[i], sizeof(drv.capabilities[i].name) - 1);
+        drv.capabilities[i].type = cap_type;
+        drv.capabilities[i].value_type = JETTYD_VAL_FLOAT;
+    }
+    return drv;
+}
+
+TEST(bme280_register_three_capabilities) {
+    const char *caps[] = {"temperature", "humidity", "pressure"};
+    jettyd_driver_t drv = make_multi_cap_driver("env", "bme280", caps, JETTYD_CAP_READABLE, 3);
+
+    drv.capabilities[0].min_value = -40;
+    drv.capabilities[0].max_value = 85;
+    drv.capabilities[1].min_value = 0;
+    drv.capabilities[1].max_value = 100;
+    drv.capabilities[2].min_value = 300;
+    drv.capabilities[2].max_value = 1100;
+
+    ASSERT_EQ(jettyd_driver_registry_add(&drv), ESP_OK);
+
+    const jettyd_driver_t *found = jettyd_driver_find("env");
+    ASSERT_NOT_NULL(found);
+    ASSERT_EQ(found->capability_count, 3);
+    ASSERT_TRUE(strcmp(found->driver_name, "bme280") == 0);
+
+    /* Find each capability by dotted name */
+    ASSERT_NOT_NULL(jettyd_driver_find_capability("env.temperature"));
+    ASSERT_NOT_NULL(jettyd_driver_find_capability("env.humidity"));
+    ASSERT_NOT_NULL(jettyd_driver_find_capability("env.pressure"));
+    ASSERT_NULL(jettyd_driver_find_capability("env.altitude"));
+}
+
+TEST(pwm_output_writable_capability) {
+    const char *caps[] = {"duty"};
+    jettyd_driver_t drv = make_multi_cap_driver("fan", "pwm_output", caps, JETTYD_CAP_WRITABLE, 1);
+
+    drv.capabilities[0].min_value = 0;
+    drv.capabilities[0].max_value = 100;
+
+    ASSERT_EQ(jettyd_driver_registry_add(&drv), ESP_OK);
+
+    const jettyd_driver_t *found = jettyd_driver_find("fan");
+    ASSERT_NOT_NULL(found);
+    ASSERT_EQ(found->capability_count, 1);
+    ASSERT_EQ(found->capabilities[0].type, JETTYD_CAP_WRITABLE);
+    ASSERT_TRUE(strcmp(found->capabilities[0].name, "duty") == 0);
+}
+
+TEST(hcsr04_readable_distance) {
+    const char *caps[] = {"distance"};
+    jettyd_driver_t drv = make_multi_cap_driver("range", "hcsr04", caps, JETTYD_CAP_READABLE, 1);
+
+    drv.capabilities[0].min_value = 2;
+    drv.capabilities[0].max_value = 400;
+
+    ASSERT_EQ(jettyd_driver_registry_add(&drv), ESP_OK);
+
+    const jettyd_driver_t *found = jettyd_driver_find_capability("range.distance");
+    ASSERT_NOT_NULL(found);
+    ASSERT_TRUE(strcmp(found->driver_name, "hcsr04") == 0);
+}
+
+TEST(ina219_register_three_capabilities) {
+    const char *caps[] = {"voltage", "current", "power"};
+    jettyd_driver_t drv = make_multi_cap_driver("pwr", "ina219", caps, JETTYD_CAP_READABLE, 3);
+
+    drv.capabilities[0].min_value = 0;
+    drv.capabilities[0].max_value = 26;
+    drv.capabilities[1].min_value = -3.2f;
+    drv.capabilities[1].max_value = 3.2f;
+    drv.capabilities[2].min_value = 0;
+    drv.capabilities[2].max_value = 83.2f;
+
+    ASSERT_EQ(jettyd_driver_registry_add(&drv), ESP_OK);
+
+    const jettyd_driver_t *found = jettyd_driver_find("pwr");
+    ASSERT_NOT_NULL(found);
+    ASSERT_EQ(found->capability_count, 3);
+    ASSERT_TRUE(strcmp(found->driver_name, "ina219") == 0);
+
+    ASSERT_NOT_NULL(jettyd_driver_find_capability("pwr.voltage"));
+    ASSERT_NOT_NULL(jettyd_driver_find_capability("pwr.current"));
+    ASSERT_NOT_NULL(jettyd_driver_find_capability("pwr.power"));
+    ASSERT_NULL(jettyd_driver_find_capability("pwr.resistance"));
+}
+
+TEST(p1_drivers_coexist) {
+    /* Register all four P1 drivers and verify they coexist */
+    const char *bme_caps[] = {"temperature", "humidity", "pressure"};
+    const char *pwm_caps[] = {"duty"};
+    const char *hcsr_caps[] = {"distance"};
+    const char *ina_caps[] = {"voltage", "current", "power"};
+
+    jettyd_driver_t bme = make_multi_cap_driver("env", "bme280", bme_caps, JETTYD_CAP_READABLE, 3);
+    jettyd_driver_t pwm = make_multi_cap_driver("fan", "pwm_output", pwm_caps, JETTYD_CAP_WRITABLE, 1);
+    jettyd_driver_t hcsr = make_multi_cap_driver("range", "hcsr04", hcsr_caps, JETTYD_CAP_READABLE, 1);
+    jettyd_driver_t ina = make_multi_cap_driver("pwr", "ina219", ina_caps, JETTYD_CAP_READABLE, 3);
+
+    ASSERT_EQ(jettyd_driver_registry_add(&bme), ESP_OK);
+    ASSERT_EQ(jettyd_driver_registry_add(&pwm), ESP_OK);
+    ASSERT_EQ(jettyd_driver_registry_add(&hcsr), ESP_OK);
+    ASSERT_EQ(jettyd_driver_registry_add(&ina), ESP_OK);
+
+    ASSERT_EQ(jettyd_driver_count(), 4);
+
+    /* Cross-driver capability lookups */
+    ASSERT_NOT_NULL(jettyd_driver_find_capability("env.pressure"));
+    ASSERT_NOT_NULL(jettyd_driver_find_capability("fan.duty"));
+    ASSERT_NOT_NULL(jettyd_driver_find_capability("range.distance"));
+    ASSERT_NOT_NULL(jettyd_driver_find_capability("pwr.power"));
+
+    /* No cross-contamination */
+    ASSERT_NULL(jettyd_driver_find_capability("env.duty"));
+    ASSERT_NULL(jettyd_driver_find_capability("fan.temperature"));
+}
+
 /* ───────────────────────────── Main ───────────────────────────────────────── */
 
 int main(void)
@@ -185,6 +313,13 @@ int main(void)
     RUN_TEST(reject_null_driver);
     RUN_TEST(max_drivers);
     RUN_TEST(find_null_inputs);
+
+    /* P1 driver tests */
+    RUN_TEST(bme280_register_three_capabilities);
+    RUN_TEST(pwm_output_writable_capability);
+    RUN_TEST(hcsr04_readable_distance);
+    RUN_TEST(ina219_register_three_capabilities);
+    RUN_TEST(p1_drivers_coexist);
 
     printf("\n═══════════════════════════════════════\n");
     printf("  Results: %d passed, %d failed\n", s_passed, s_failed);
