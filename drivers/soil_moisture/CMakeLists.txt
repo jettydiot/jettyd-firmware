@@ -1,5 +1,5 @@
 idf_component_register(
     SRCS "soil_moisture.c"
     INCLUDE_DIRS "include"
-    REQUIRES esp_adc jettyd_core
+    REQUIRES esp_adc jettyd
 )
