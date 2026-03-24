@@ -10,6 +10,7 @@
 #include "esp_event.h"
 #include "esp_timer.h"
 #include "esp_log.h"
+#include <stdbool.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include <string.h>

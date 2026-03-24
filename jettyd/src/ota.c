@@ -9,6 +9,7 @@
 #include "jettyd_telemetry.h"
 #include "sdkconfig.h"
 #include "esp_log.h"
+#include <stdbool.h>
 #include "esp_ota_ops.h"
 #include "esp_https_ota.h"
 #include "esp_system.h"

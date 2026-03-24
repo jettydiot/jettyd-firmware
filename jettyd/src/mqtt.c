@@ -6,6 +6,7 @@
 #include "jettyd_mqtt.h"
 #include "jettyd_provision.h"
 #include "esp_log.h"
+#include <stdbool.h>
 #include "mqtt_client.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"

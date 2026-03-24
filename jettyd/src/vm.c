@@ -14,6 +14,7 @@
 #include "jettyd_shadow.h"
 #include "jettyd.h"
 #include "esp_log.h"
+#include <stdbool.h>
 #include "esp_timer.h"
 #include "cJSON.h"
 #include "freertos/FreeRTOS.h"

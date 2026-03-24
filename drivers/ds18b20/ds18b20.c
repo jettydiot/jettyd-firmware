@@ -10,6 +10,7 @@
 #include "jettyd_driver.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include <stdbool.h>
 #include "esp_timer.h"
 #include "rom/ets_sys.h"
 #include "freertos/FreeRTOS.h"

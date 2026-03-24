@@ -7,6 +7,7 @@
 #include "jettyd_driver.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include <stdbool.h>
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/timers.h"

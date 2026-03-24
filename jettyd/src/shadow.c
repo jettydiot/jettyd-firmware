@@ -8,6 +8,7 @@
 #include "jettyd_mqtt.h"
 #include "jettyd_vm.h"
 #include "esp_log.h"
+#include <stdbool.h>
 #include "cJSON.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"

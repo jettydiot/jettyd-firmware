@@ -8,6 +8,7 @@
 #include "jettyd_nvs.h"
 #include "jettyd_mqtt.h"
 #include "esp_log.h"
+#include <stdbool.h>
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"

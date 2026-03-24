@@ -7,6 +7,7 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "esp_log.h"
+#include <stdbool.h>
 
 static const char *TAG = "jettyd_nvs";
 

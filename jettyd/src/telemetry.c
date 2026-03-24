@@ -9,6 +9,7 @@
 #include "jettyd_wifi.h"
 #include "jettyd.h"
 #include "esp_log.h"
+#include <stdbool.h>
 #include "esp_system.h"
 #include "esp_timer.h"
 #include <string.h>
