@@ -616,22 +616,22 @@ esp_err_t jettyd_vm_persist_to_nvs(void)
 
 #define APPEND(...) do { int n = snprintf(config_buf + pos, rem, __VA_ARGS__); if (n < 0 || n >= rem) return ESP_ERR_NO_MEM; pos += n; rem -= n; } while(0)
 
-    APPEND("{"version":1,"rules":[");
+    APPEND("{\"version\":1,\"rules\":[");
     for (uint8_t i = 0; i < s_vm.rule_count; i++) {
         if (i > 0) APPEND(",");
-        APPEND("{"id":"%s","enabled":%s}",
+        APPEND("{\"id\":\"%s\",\"enabled\":%s}",
                s_vm.rules[i].id,
                s_vm.rules[i].enabled ? "true" : "false");
     }
-    APPEND("],"heartbeats":[");
+    APPEND("],\"heartbeats\":[");
     for (uint8_t i = 0; i < s_vm.heartbeat_count; i++) {
         if (i > 0) APPEND(",");
-        APPEND("{"id":"%s","every":%lu,"metrics":[",
+        APPEND("{\"id\":\"%s\",\"every\":%lu,\"metrics\":[",
                s_vm.heartbeats[i].id,
                (unsigned long)s_vm.heartbeats[i].interval_sec);
         for (uint8_t m = 0; m < s_vm.heartbeats[i].metric_count; m++) {
             if (m > 0) APPEND(",");
-            APPEND(""%s"", s_vm.heartbeats[i].metrics[m]);
+            APPEND("\"%s\"", s_vm.heartbeats[i].metrics[m]);
         }
         APPEND("]}");
     }
@@ -954,13 +954,13 @@ void jettyd_vm_config_handler(const char *topic, const char *data, int data_len)
         int rpos = 0;
         int rrem = (int)sizeof(reject_buf);
 #define RAPP(...) do { int n = snprintf(reject_buf + rpos, rrem, __VA_ARGS__); if (n > 0 && n < rrem) { rpos += n; rrem -= n; } } while(0)
-        RAPP("{"type":"config_rejected","errors":[");
+        RAPP("{\"type\":\"config_rejected\",\"errors\":[");
         for (uint8_t i = 0; i < error_count; i++) {
             if (i > 0) RAPP(",");
             if (errors[i].rule_id[0]) {
-                RAPP("{"rule":"%s","error":"%s"}", errors[i].rule_id, errors[i].error);
+                RAPP("{\"rule\":\"%s\",\"error\":\"%s\"}", errors[i].rule_id, errors[i].error);
             } else {
-                RAPP("{"error":"%s"}", errors[i].error);
+                RAPP("{\"error\":\"%s\"}", errors[i].error);
             }
         }
         RAPP("]}");
