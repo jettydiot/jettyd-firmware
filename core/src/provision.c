@@ -30,6 +30,7 @@ static void provision_response_handler(const char *topic, const char *data, int 
 {
     ESP_LOGI(TAG, "Provisioning response received");
 
+    /* data is MQTT payload — size is bounded by MQTT message limit */
     cJSON *root = cJSON_ParseWithLength(data, data_len);
     if (root == NULL) {
         ESP_LOGE(TAG, "Failed to parse provisioning response");
@@ -136,16 +137,22 @@ esp_err_t jettyd_provision_run(void)
              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     cJSON_AddStringToObject(req, "mac_address", mac_str);
 
-    char *json_str = cJSON_PrintUnformatted(req);
+    /* Use a static buffer to avoid dynamic allocation at runtime.
+     * Fleet token + device info fits comfortably in 512 bytes. */
+    static char json_buf[512];
+    char *json_str_tmp = cJSON_PrintUnformatted(req);
     cJSON_Delete(req);
 
-    if (json_str == NULL) {
+    if (json_str_tmp == NULL) {
         vEventGroupDelete(s_prov_event_group);
         return ESP_ERR_NO_MEM;
     }
+    strlcpy(json_buf, json_str_tmp, sizeof(json_buf));
+    cJSON_free(json_str_tmp);
+    char *json_str = json_buf;
 
     err = jettyd_mqtt_publish("jettyd/provision/request", json_str, 1, false);
-    cJSON_free(json_str);
+    /* json_str points to static buffer, no free needed */
 
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to publish provisioning request");

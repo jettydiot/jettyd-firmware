@@ -32,7 +32,7 @@ typedef struct {
 } mqtt_buffered_msg_t;
 
 static esp_mqtt_client_handle_t s_client = NULL;
-static bool s_connected = false;
+static volatile bool s_connected = false;
 static jettyd_mqtt_config_t s_config;
 static mqtt_subscription_t s_subs[MAX_SUBSCRIPTIONS];
 static uint8_t s_sub_count = 0;
