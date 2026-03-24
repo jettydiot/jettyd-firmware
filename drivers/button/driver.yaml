@@ -1,0 +1,11 @@
+name: button
+version: "1.0.0"
+type: sensor
+description: "GPIO button/switch driver with debounce and press counting"
+capabilities:
+  - name: press
+    type: bool
+    unit: ""
+  - name: press_count
+    type: float
+    unit: "count"

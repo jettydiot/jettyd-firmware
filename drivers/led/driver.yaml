@@ -1,0 +1,13 @@
+name: led
+version: "1.0.0"
+type: actuator
+description: "GPIO LED driver with on/off/blink control"
+capabilities:
+  - name: state
+    type: bool
+    unit: ""
+commands:
+  - led.on
+  - led.off
+  - led.toggle
+  - led.blink
