@@ -11,7 +11,6 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_timer.h"
-#include "cJSON.h"
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
@@ -49,13 +48,34 @@ void jettyd_telemetry_get_system_metrics(float *battery, int8_t *rssi,
     }
 }
 
-/**
- * @brief Read a single dotted metric and add it to a cJSON object.
- *
- * For "system.*" metrics, reads system state directly.
- * For driver metrics, reads via the driver registry.
- */
-static void add_metric_to_json(cJSON *readings, const char *dotted_name)
+static int append_value_to_buf(char *buf, size_t buf_len, int pos,
+                               const char *key, jettyd_value_t val, bool *first)
+{
+    if (!*first) {
+        pos += snprintf(buf + pos, buf_len - pos, ",");
+    }
+    *first = false;
+
+    switch (val.type) {
+    case JETTYD_VAL_FLOAT:
+        pos += snprintf(buf + pos, buf_len - pos, "\"%s\":%g", key, (double)val.float_val);
+        break;
+    case JETTYD_VAL_INT:
+        pos += snprintf(buf + pos, buf_len - pos, "\"%s\":%ld", key, (long)val.int_val);
+        break;
+    case JETTYD_VAL_BOOL:
+        pos += snprintf(buf + pos, buf_len - pos, "\"%s\":%s", key,
+                        val.bool_val ? "true" : "false");
+        break;
+    case JETTYD_VAL_STRING:
+        pos += snprintf(buf + pos, buf_len - pos, "\"%s\":\"%s\"", key, val.str_val);
+        break;
+    }
+    return pos;
+}
+
+static int add_metric_to_buf(char *buf, size_t buf_len, int pos,
+                             const char *dotted_name, bool *first)
 {
     /* Handle system metrics */
     if (strncmp(dotted_name, "system.", 7) == 0) {
@@ -65,48 +85,42 @@ static void add_metric_to_json(cJSON *readings, const char *dotted_name)
         uint32_t uptime_val, heap;
         jettyd_telemetry_get_system_metrics(&battery, &rssi, &uptime_val, &heap);
 
+        jettyd_value_t val = {.valid = true};
         if (strcmp(sys_key, "battery") == 0) {
-            cJSON_AddNumberToObject(readings, dotted_name, battery);
+            val.type = JETTYD_VAL_FLOAT;
+            val.float_val = battery;
         } else if (strcmp(sys_key, "rssi") == 0) {
-            cJSON_AddNumberToObject(readings, dotted_name, rssi);
+            val.type = JETTYD_VAL_INT;
+            val.int_val = rssi;
         } else if (strcmp(sys_key, "uptime") == 0) {
-            cJSON_AddNumberToObject(readings, dotted_name, uptime_val);
+            val.type = JETTYD_VAL_INT;
+            val.int_val = (int32_t)uptime_val;
         } else if (strcmp(sys_key, "heap_free") == 0) {
-            cJSON_AddNumberToObject(readings, dotted_name, heap);
+            val.type = JETTYD_VAL_INT;
+            val.int_val = (int32_t)heap;
+        } else {
+            return pos;
         }
-        return;
+        return append_value_to_buf(buf, buf_len, pos, dotted_name, val, first);
     }
 
     /* Driver metric: parse "instance.capability" */
     const jettyd_driver_t *drv = jettyd_driver_find_capability(dotted_name);
     if (drv == NULL || drv->read == NULL) {
-        return;
+        return pos;
     }
 
     const char *dot = strchr(dotted_name, '.');
-    if (dot == NULL) return;
+    if (dot == NULL) return pos;
     const char *cap_name = dot + 1;
 
     jettyd_value_t val = drv->read(cap_name);
-    if (!val.valid) return;
+    if (!val.valid) return pos;
 
     /* Also update shadow */
     jettyd_shadow_update(dotted_name, val);
 
-    switch (val.type) {
-    case JETTYD_VAL_FLOAT:
-        cJSON_AddNumberToObject(readings, dotted_name, val.float_val);
-        break;
-    case JETTYD_VAL_INT:
-        cJSON_AddNumberToObject(readings, dotted_name, val.int_val);
-        break;
-    case JETTYD_VAL_BOOL:
-        cJSON_AddBoolToObject(readings, dotted_name, val.bool_val);
-        break;
-    case JETTYD_VAL_STRING:
-        cJSON_AddStringToObject(readings, dotted_name, val.str_val);
-        break;
-    }
+    return append_value_to_buf(buf, buf_len, pos, dotted_name, val, first);
 }
 
 esp_err_t jettyd_telemetry_publish(const char **metrics, uint8_t metric_count)
@@ -115,42 +129,43 @@ esp_err_t jettyd_telemetry_publish(const char **metrics, uint8_t metric_count)
         return jettyd_telemetry_publish_all();
     }
 
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddNumberToObject(root, "ts", (double)time(NULL));
+    static char telemetry_buf[1024];
+    int pos = 0;
+    bool first = true;
 
-    cJSON *readings = cJSON_CreateObject();
+    pos += snprintf(telemetry_buf + pos, sizeof(telemetry_buf) - pos,
+                    "{\"ts\":%lld,\"readings\":{", (long long)time(NULL));
 
     for (uint8_t i = 0; i < metric_count; i++) {
         if (metrics[i]) {
-            add_metric_to_json(readings, metrics[i]);
+            pos = add_metric_to_buf(telemetry_buf, sizeof(telemetry_buf), pos,
+                                    metrics[i], &first);
         }
     }
 
     /* Always include system metrics */
-    add_metric_to_json(readings, "system.battery");
-    add_metric_to_json(readings, "system.rssi");
-    add_metric_to_json(readings, "system.uptime");
-    add_metric_to_json(readings, "system.heap_free");
+    pos = add_metric_to_buf(telemetry_buf, sizeof(telemetry_buf), pos,
+                            "system.battery", &first);
+    pos = add_metric_to_buf(telemetry_buf, sizeof(telemetry_buf), pos,
+                            "system.rssi", &first);
+    pos = add_metric_to_buf(telemetry_buf, sizeof(telemetry_buf), pos,
+                            "system.uptime", &first);
+    pos = add_metric_to_buf(telemetry_buf, sizeof(telemetry_buf), pos,
+                            "system.heap_free", &first);
 
-    cJSON_AddItemToObject(root, "readings", readings);
+    pos += snprintf(telemetry_buf + pos, sizeof(telemetry_buf) - pos, "}}");
 
-    char *json_str = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
-
-    if (json_str == NULL) {
+    if ((size_t)pos >= sizeof(telemetry_buf)) {
         return ESP_ERR_NO_MEM;
     }
 
     char topic[JETTYD_MQTT_MAX_TOPIC];
     esp_err_t err = jettyd_mqtt_build_topic(topic, sizeof(topic), "telemetry");
     if (err != ESP_OK) {
-        cJSON_free(json_str);
         return err;
     }
 
-    err = jettyd_mqtt_publish(topic, json_str, 1, false);
-    cJSON_free(json_str);
-
+    err = jettyd_mqtt_publish(topic, telemetry_buf, 1, false);
     if (err == ESP_OK) {
         ESP_LOGD(TAG, "Published telemetry (%d metrics)", metric_count);
     }
@@ -159,10 +174,12 @@ esp_err_t jettyd_telemetry_publish(const char **metrics, uint8_t metric_count)
 
 esp_err_t jettyd_telemetry_publish_all(void)
 {
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddNumberToObject(root, "ts", (double)time(NULL));
+    static char telemetry_buf[1024];
+    int pos = 0;
+    bool first = true;
 
-    cJSON *readings = cJSON_CreateObject();
+    pos += snprintf(telemetry_buf + pos, sizeof(telemetry_buf) - pos,
+                    "{\"ts\":%lld,\"readings\":{", (long long)time(NULL));
 
     /* Read all driver capabilities */
     uint8_t count = jettyd_driver_count();
@@ -186,39 +203,39 @@ esp_err_t jettyd_telemetry_publish_all(void)
                     .bool_val = drv->get_state(),
                     .valid = true
                 };
-                cJSON_AddBoolToObject(readings, dotted, val.bool_val);
+                pos = append_value_to_buf(telemetry_buf, sizeof(telemetry_buf),
+                                          pos, dotted, val, &first);
                 jettyd_shadow_update(dotted, val);
             } else {
-                add_metric_to_json(readings, dotted);
+                pos = add_metric_to_buf(telemetry_buf, sizeof(telemetry_buf),
+                                        pos, dotted, &first);
             }
         }
     }
 
     /* System metrics */
-    add_metric_to_json(readings, "system.battery");
-    add_metric_to_json(readings, "system.rssi");
-    add_metric_to_json(readings, "system.uptime");
-    add_metric_to_json(readings, "system.heap_free");
+    pos = add_metric_to_buf(telemetry_buf, sizeof(telemetry_buf), pos,
+                            "system.battery", &first);
+    pos = add_metric_to_buf(telemetry_buf, sizeof(telemetry_buf), pos,
+                            "system.rssi", &first);
+    pos = add_metric_to_buf(telemetry_buf, sizeof(telemetry_buf), pos,
+                            "system.uptime", &first);
+    pos = add_metric_to_buf(telemetry_buf, sizeof(telemetry_buf), pos,
+                            "system.heap_free", &first);
 
-    cJSON_AddItemToObject(root, "readings", readings);
+    pos += snprintf(telemetry_buf + pos, sizeof(telemetry_buf) - pos, "}}");
 
-    char *json_str = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
-
-    if (json_str == NULL) {
+    if ((size_t)pos >= sizeof(telemetry_buf)) {
         return ESP_ERR_NO_MEM;
     }
 
     char topic[JETTYD_MQTT_MAX_TOPIC];
     esp_err_t err = jettyd_mqtt_build_topic(topic, sizeof(topic), "telemetry");
     if (err != ESP_OK) {
-        cJSON_free(json_str);
         return err;
     }
 
-    err = jettyd_mqtt_publish(topic, json_str, 1, false);
-    cJSON_free(json_str);
-    return err;
+    return jettyd_mqtt_publish(topic, telemetry_buf, 1, false);
 }
 
 esp_err_t jettyd_telemetry_publish_alert(const char *message, const char *severity)
@@ -227,28 +244,18 @@ esp_err_t jettyd_telemetry_publish_alert(const char *message, const char *severi
         return ESP_ERR_INVALID_ARG;
     }
 
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddNumberToObject(root, "ts", (double)time(NULL));
-    cJSON_AddStringToObject(root, "message", message);
-    cJSON_AddStringToObject(root, "severity", severity);
-
-    char *json_str = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
-
-    if (json_str == NULL) {
-        return ESP_ERR_NO_MEM;
-    }
+    static char alert_buf[256];
+    snprintf(alert_buf, sizeof(alert_buf),
+             "{\"ts\":%lld,\"message\":\"%s\",\"severity\":\"%s\"}",
+             (long long)time(NULL), message, severity);
 
     char topic[JETTYD_MQTT_MAX_TOPIC];
     esp_err_t err = jettyd_mqtt_build_topic(topic, sizeof(topic), "alert");
     if (err != ESP_OK) {
-        cJSON_free(json_str);
         return err;
     }
 
-    err = jettyd_mqtt_publish(topic, json_str, 1, false);
-    cJSON_free(json_str);
-    return err;
+    return jettyd_mqtt_publish(topic, alert_buf, 1, false);
 }
 
 esp_err_t jettyd_telemetry_publish_status(const char *status)
@@ -257,25 +264,16 @@ esp_err_t jettyd_telemetry_publish_status(const char *status)
         return ESP_ERR_INVALID_ARG;
     }
 
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "status", status);
-    cJSON_AddNumberToObject(root, "ts", (double)time(NULL));
-
-    char *json_str = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
-
-    if (json_str == NULL) {
-        return ESP_ERR_NO_MEM;
-    }
+    static char status_buf[128];
+    snprintf(status_buf, sizeof(status_buf),
+             "{\"status\":\"%s\",\"ts\":%lld}",
+             status, (long long)time(NULL));
 
     char topic[JETTYD_MQTT_MAX_TOPIC];
     esp_err_t err = jettyd_mqtt_build_topic(topic, sizeof(topic), "status");
     if (err != ESP_OK) {
-        cJSON_free(json_str);
         return err;
     }
 
-    err = jettyd_mqtt_publish(topic, json_str, 1, false);
-    cJSON_free(json_str);
-    return err;
+    return jettyd_mqtt_publish(topic, status_buf, 1, false);
 }

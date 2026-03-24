@@ -1,30 +1,30 @@
 name: pwm_output
-description: "LEDC PWM output driver with 0-100% duty cycle control"
+description: "LEDC PWM actuator with safety auto-off timer"
 category: actuator
 capabilities:
   - name: duty
     type: writable
     value_type: float
     unit: "%"
-    description: "PWM duty cycle percentage (0-100)"
+    description: "PWM duty cycle 0-100%"
 
 config_schema:
-  gpio_pin:
+  pin:
     type: int
     required: true
-    description: "GPIO pin for PWM output"
-  frequency_hz:
+    description: "GPIO pin number"
+  ledc_channel:
+    type: int
+    default: 0
+    description: "LEDC channel (0-7)"
+  freq_hz:
     type: int
     default: 1000
     description: "PWM frequency in Hz"
-  ledc_channel:
+  max_on_duration:
     type: int
-    required: true
-    description: "LEDC channel number"
-  ledc_timer:
-    type: int
-    required: true
-    description: "LEDC timer number"
+    default: 3600
+    description: "Safety auto-off after N seconds (0 = no limit)"
 
 esp_idf_components:
   - driver

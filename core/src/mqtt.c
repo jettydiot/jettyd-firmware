@@ -38,6 +38,7 @@ static mqtt_subscription_t s_subs[MAX_SUBSCRIPTIONS];
 static uint8_t s_sub_count = 0;
 static mqtt_buffered_msg_t s_buffer[JETTYD_MQTT_MAX_BUFFER];
 static SemaphoreHandle_t s_mutex = NULL;
+static portMUX_TYPE s_subs_spinlock = portMUX_INITIALIZER_UNLOCKED;
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
                                 int32_t event_id, void *event_data)
@@ -45,18 +46,25 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
     esp_mqtt_event_handle_t event = event_data;
 
     switch (event->event_id) {
-    case MQTT_EVENT_CONNECTED:
+    case MQTT_EVENT_CONNECTED: {
         ESP_LOGI(TAG, "MQTT connected");
         s_connected = true;
 
-        /* Re-subscribe to all registered topics */
-        for (uint8_t i = 0; i < s_sub_count; i++) {
-            esp_mqtt_client_subscribe(s_client, s_subs[i].topic, s_config.qos);
+        /* Re-subscribe to all registered topics under spinlock */
+        portENTER_CRITICAL(&s_subs_spinlock);
+        uint8_t count = s_sub_count;
+        mqtt_subscription_t subs_copy[MAX_SUBSCRIPTIONS];
+        memcpy(subs_copy, s_subs, count * sizeof(mqtt_subscription_t));
+        portEXIT_CRITICAL(&s_subs_spinlock);
+
+        for (uint8_t i = 0; i < count; i++) {
+            esp_mqtt_client_subscribe(s_client, subs_copy[i].topic, s_config.qos);
         }
 
         /* Flush buffered messages */
         jettyd_mqtt_flush_buffer();
         break;
+    }
 
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGW(TAG, "MQTT disconnected");
@@ -71,13 +79,20 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
         memcpy(topic_buf, event->topic, topic_len);
         topic_buf[topic_len] = '\0';
 
-        for (uint8_t i = 0; i < s_sub_count; i++) {
+        /* Snapshot subscriptions under spinlock */
+        portENTER_CRITICAL(&s_subs_spinlock);
+        uint8_t data_count = s_sub_count;
+        mqtt_subscription_t data_subs_copy[MAX_SUBSCRIPTIONS];
+        memcpy(data_subs_copy, s_subs, data_count * sizeof(mqtt_subscription_t));
+        portEXIT_CRITICAL(&s_subs_spinlock);
+
+        for (uint8_t i = 0; i < data_count; i++) {
             /* Simple prefix match for wildcard subscriptions */
-            if (strcmp(s_subs[i].topic, topic_buf) == 0 ||
-                (s_subs[i].topic[strlen(s_subs[i].topic) - 1] == '#' &&
-                 strncmp(s_subs[i].topic, topic_buf, strlen(s_subs[i].topic) - 1) == 0)) {
-                if (s_subs[i].callback) {
-                    s_subs[i].callback(topic_buf, event->data, event->data_len);
+            if (strcmp(data_subs_copy[i].topic, topic_buf) == 0 ||
+                (data_subs_copy[i].topic[strlen(data_subs_copy[i].topic) - 1] == '#' &&
+                 strncmp(data_subs_copy[i].topic, topic_buf, strlen(data_subs_copy[i].topic) - 1) == 0)) {
+                if (data_subs_copy[i].callback) {
+                    data_subs_copy[i].callback(topic_buf, event->data, event->data_len);
                 }
             }
         }
@@ -159,11 +174,11 @@ esp_err_t jettyd_mqtt_subscribe(const char *topic, uint8_t qos, jettyd_mqtt_msg_
         return ESP_ERR_NO_MEM;
     }
 
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    portENTER_CRITICAL(&s_subs_spinlock);
     strncpy(s_subs[s_sub_count].topic, topic, JETTYD_MQTT_MAX_TOPIC - 1);
     s_subs[s_sub_count].callback = cb;
     s_sub_count++;
-    xSemaphoreGive(s_mutex);
+    portEXIT_CRITICAL(&s_subs_spinlock);
 
     if (s_connected && s_client) {
         esp_mqtt_client_subscribe(s_client, topic, qos);

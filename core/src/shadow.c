@@ -116,9 +116,10 @@ esp_err_t jettyd_shadow_set_desired(const char *json, int len)
 
 int jettyd_shadow_serialize(char *buf, size_t buf_len)
 {
-    cJSON *root = cJSON_CreateObject();
-    cJSON *reported = cJSON_CreateObject();
-    cJSON *metadata = cJSON_CreateObject();
+    int pos = 0;
+    bool first = true;
+
+    pos += snprintf(buf + pos, buf_len - pos, "{\"reported\":{");
 
     xSemaphoreTake(s_mutex, portMAX_DELAY);
 
@@ -126,22 +127,28 @@ int jettyd_shadow_serialize(char *buf, size_t buf_len)
         if (!s_reported[i].used || !s_reported[i].value.valid) {
             continue;
         }
+        if (!first) {
+            pos += snprintf(buf + pos, buf_len - pos, ",");
+        }
+        first = false;
+
         switch (s_reported[i].value.type) {
         case JETTYD_VAL_FLOAT:
-            cJSON_AddNumberToObject(reported, s_reported[i].key,
-                                    s_reported[i].value.float_val);
+            pos += snprintf(buf + pos, buf_len - pos, "\"%s\":%g",
+                            s_reported[i].key, (double)s_reported[i].value.float_val);
             break;
         case JETTYD_VAL_INT:
-            cJSON_AddNumberToObject(reported, s_reported[i].key,
-                                    s_reported[i].value.int_val);
+            pos += snprintf(buf + pos, buf_len - pos, "\"%s\":%ld",
+                            s_reported[i].key, (long)s_reported[i].value.int_val);
             break;
         case JETTYD_VAL_BOOL:
-            cJSON_AddBoolToObject(reported, s_reported[i].key,
-                                  s_reported[i].value.bool_val);
+            pos += snprintf(buf + pos, buf_len - pos, "\"%s\":%s",
+                            s_reported[i].key,
+                            s_reported[i].value.bool_val ? "true" : "false");
             break;
         case JETTYD_VAL_STRING:
-            cJSON_AddStringToObject(reported, s_reported[i].key,
-                                    s_reported[i].value.str_val);
+            pos += snprintf(buf + pos, buf_len - pos, "\"%s\":\"%s\"",
+                            s_reported[i].key, s_reported[i].value.str_val);
             break;
         }
     }
@@ -149,42 +156,34 @@ int jettyd_shadow_serialize(char *buf, size_t buf_len)
     /* VM state */
     const jettyd_vm_state_t *vm = jettyd_vm_get_state();
     if (vm != NULL) {
-        cJSON_AddNumberToObject(reported, "vm.rules_loaded", vm->rule_count);
-        cJSON_AddNumberToObject(reported, "vm.heartbeats_loaded", vm->heartbeat_count);
+        if (!first) {
+            pos += snprintf(buf + pos, buf_len - pos, ",");
+        }
+        pos += snprintf(buf + pos, buf_len - pos,
+                        "\"vm.rules_loaded\":%d,\"vm.heartbeats_loaded\":%d",
+                        vm->rule_count, vm->heartbeat_count);
     }
 
     xSemaphoreGive(s_mutex);
 
-    cJSON_AddItemToObject(root, "reported", reported);
+    pos += snprintf(buf + pos, buf_len - pos, "}");
 
     /* Desired */
     if (s_has_desired) {
-        cJSON *desired = cJSON_Parse(s_desired_json);
-        cJSON_AddItemToObject(root, "desired", desired ? desired : cJSON_CreateNull());
+        pos += snprintf(buf + pos, buf_len - pos, ",\"desired\":%s", s_desired_json);
     } else {
-        cJSON_AddNullToObject(root, "desired");
+        pos += snprintf(buf + pos, buf_len - pos, ",\"desired\":null");
     }
 
     /* Metadata */
-    cJSON_AddNumberToObject(metadata, "last_report", (double)time(NULL));
-    cJSON_AddItemToObject(root, "metadata", metadata);
+    pos += snprintf(buf + pos, buf_len - pos,
+                    ",\"metadata\":{\"last_report\":%lld}}",
+                    (long long)time(NULL));
 
-    char *json_str = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
-
-    if (json_str == NULL) {
+    if ((size_t)pos >= buf_len) {
         return -1;
     }
-
-    int len = (int)strlen(json_str);
-    if ((size_t)len >= buf_len) {
-        cJSON_free(json_str);
-        return -1;
-    }
-
-    memcpy(buf, json_str, len + 1);
-    cJSON_free(json_str);
-    return len;
+    return pos;
 }
 
 esp_err_t jettyd_shadow_publish(void)
