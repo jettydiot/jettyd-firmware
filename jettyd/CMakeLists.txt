@@ -26,6 +26,6 @@ idf_component_register(
         esp_system
         freertos
         driver
-        esp_ota_ops
         app_update
+        esp_partition
 )
