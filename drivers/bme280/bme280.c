@@ -9,8 +9,10 @@
 
 #include "bme280.h"
 #include "jettyd_driver.h"
-#include "driver/i2c_master.h"
+#include "driver/i2c.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <string.h>
 
 static const char *TAG = "drv_bme280";

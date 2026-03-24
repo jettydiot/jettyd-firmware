@@ -1,5 +1,5 @@
 idf_component_register(
     SRCS "pwm_output.c"
     INCLUDE_DIRS "include"
-    REQUIRES driver jettyd
+    REQUIRES driver jettyd freertos
 )
