@@ -16,7 +16,7 @@
 #include "jettyd_driver.h"
 
 /** Maximum shadow JSON size */
-#define JETTYD_SHADOW_MAX_SIZE  2048
+#define JETTYD_SHADOW_MAX_SIZE  1024
 
 /**
  * @brief Initialize the shadow subsystem.

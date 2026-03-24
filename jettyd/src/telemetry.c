@@ -130,7 +130,7 @@ esp_err_t jettyd_telemetry_publish(const char **metrics, uint8_t metric_count)
         return jettyd_telemetry_publish_all();
     }
 
-    static char telemetry_buf[1024];
+    static char telemetry_buf[512];
     int pos = 0;
     bool first = true;
 
@@ -175,7 +175,7 @@ esp_err_t jettyd_telemetry_publish(const char **metrics, uint8_t metric_count)
 
 esp_err_t jettyd_telemetry_publish_all(void)
 {
-    static char telemetry_buf[1024];
+    static char telemetry_buf[512];
     int pos = 0;
     bool first = true;
 

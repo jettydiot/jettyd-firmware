@@ -21,7 +21,7 @@
 #define JETTYD_VM_MAX_METRICS       8
 #define JETTYD_VM_MAX_CONDITIONS    4   /**< For compound conditions */
 #define JETTYD_VM_MAX_NESTING       2   /**< Max compound nesting depth */
-#define JETTYD_VM_CONFIG_MAX_SIZE   4096 /**< Max serialized config size */
+#define JETTYD_VM_CONFIG_MAX_SIZE   2048 /**< Max serialized config size */
 #define JETTYD_VM_TICK_MS           100  /**< Evaluation loop interval */
 #define JETTYD_VM_MIN_HEARTBEAT_SEC 10
 #define JETTYD_VM_MAX_HEARTBEAT_SEC 3600

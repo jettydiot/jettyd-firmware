@@ -31,7 +31,7 @@ static const char *TAG = "jettyd_vm";
  * Arena is reset at the start of each jettyd_vm_load_config() call.
  * Size: 8KB comfortably holds a config with 16 rules + 8 heartbeats.
  * ─────────────────────────────────────────────────────────────────────── */
-#define JETTYD_VM_PARSE_ARENA_SIZE (4 * 1024)
+#define JETTYD_VM_PARSE_ARENA_SIZE (2 * 1024)
 static uint8_t  s_cjson_arena[JETTYD_VM_PARSE_ARENA_SIZE];
 static size_t   s_cjson_arena_pos = 0;
 

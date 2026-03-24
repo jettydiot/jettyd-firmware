@@ -14,13 +14,13 @@
 #include "esp_err.h"
 
 /** Maximum offline message buffer entries */
-#define JETTYD_MQTT_MAX_BUFFER  50
+#define JETTYD_MQTT_MAX_BUFFER  8
 
 /** Maximum topic length */
 #define JETTYD_MQTT_MAX_TOPIC   128
 
 /** Maximum payload length */
-#define JETTYD_MQTT_MAX_PAYLOAD 2048
+#define JETTYD_MQTT_MAX_PAYLOAD 512
 
 /**
  * @brief Callback for received MQTT messages.
