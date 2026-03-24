@@ -207,8 +207,9 @@ esp_err_t jettyd_init(const jettyd_config_t *config)
     }
 
     memcpy(&s_config, config, sizeof(jettyd_config_t));
-    JETTYD_FIRMWARE_VERSION = config->firmware_version;
-    JETTYD_DEVICE_TYPE = config->device_type;
+    /* JETTYD_FIRMWARE_VERSION and JETTYD_DEVICE_TYPE are set at compile time
+     * via CONFIG_JETTYD_FIRMWARE_VERSION / CONFIG_JETTYD_DEVICE_TYPE (Kconfig).
+     * Runtime override via config->firmware_version / config->device_type is ignored. */
 
     ESP_LOGI(TAG, "═══════════════════════════════════════");
     ESP_LOGI(TAG, "  Jettyd Firmware SDK");

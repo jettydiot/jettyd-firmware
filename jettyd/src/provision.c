@@ -8,6 +8,7 @@
 #include "jettyd_nvs.h"
 #include "jettyd_mqtt.h"
 #include "esp_log.h"
+#include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include <string.h>
@@ -186,8 +187,8 @@ esp_err_t jettyd_provision_run(void)
         "{\"fleet_token\":\"%s\",\"device_type\":\"%s\","
         "\"firmware_version\":\"%s\",\"mac_address\":\"%s\"}",
         s_state.fleet_token,
-        JETTYD_DEVICE_TYPE ? JETTYD_DEVICE_TYPE : "unknown",
-        JETTYD_FIRMWARE_VERSION ? JETTYD_FIRMWARE_VERSION : "0.0.0",
+        CONFIG_JETTYD_DEVICE_TYPE,
+        CONFIG_JETTYD_FIRMWARE_VERSION,
         mac_str);
 
     err = jettyd_mqtt_publish("jettyd/provision/request", json_buf, 1, false);

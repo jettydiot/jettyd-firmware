@@ -7,6 +7,7 @@
 #include "jettyd_nvs.h"
 #include "jettyd_mqtt.h"
 #include "jettyd_telemetry.h"
+#include "sdkconfig.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
 #include "esp_https_ota.h"
@@ -59,14 +60,13 @@ esp_err_t jettyd_ota_handle(const jettyd_ota_notification_t *notification)
     }
 
     /* Skip if already running this version */
-    if (JETTYD_FIRMWARE_VERSION &&
-        strcmp(notification->version, JETTYD_FIRMWARE_VERSION) == 0) {
+    if (strcmp(notification->version, CONFIG_JETTYD_FIRMWARE_VERSION) == 0) {
         ESP_LOGI(TAG, "Already running version %s, skipping OTA", notification->version);
         return ESP_OK;
     }
 
     ESP_LOGI(TAG, "Starting OTA: %s -> %s (size: %lu)",
-             JETTYD_FIRMWARE_VERSION ? JETTYD_FIRMWARE_VERSION : "unknown",
+             CONFIG_JETTYD_FIRMWARE_VERSION,
              notification->version, (unsigned long)notification->size);
 
     /* Publish updating status */
