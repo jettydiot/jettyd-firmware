@@ -4,6 +4,7 @@
  */
 
 #include "jettyd_provision.h"
+#include "sdkconfig.h"
 #include "jettyd_nvs.h"
 #include "jettyd_mqtt.h"
 #include "esp_log.h"
@@ -104,6 +105,27 @@ esp_err_t jettyd_provision_init(void)
                         s_state.wifi_ssid, sizeof(s_state.wifi_ssid));
     jettyd_nvs_read_str(JETTYD_PROV_NVS_NAMESPACE, JETTYD_PROV_KEY_WIFI_PASS,
                         s_state.wifi_pass, sizeof(s_state.wifi_pass));
+
+    /* Seed from Kconfig compile-time defaults if NVS is empty (first boot) */
+#if defined(CONFIG_JETTYD_FLEET_TOKEN) && defined(CONFIG_JETTYD_WIFI_SSID)
+    if (s_state.fleet_token[0] == '\0' && strlen(CONFIG_JETTYD_FLEET_TOKEN) > 0) {
+        strlcpy(s_state.fleet_token, CONFIG_JETTYD_FLEET_TOKEN, sizeof(s_state.fleet_token));
+        jettyd_nvs_write_str(JETTYD_PROV_NVS_NAMESPACE, JETTYD_PROV_KEY_FLEET_TOKEN, s_state.fleet_token);
+        ESP_LOGI(TAG, "Seeded fleet token from Kconfig");
+    }
+    if (s_state.wifi_ssid[0] == '\0' && strlen(CONFIG_JETTYD_WIFI_SSID) > 0) {
+        strlcpy(s_state.wifi_ssid, CONFIG_JETTYD_WIFI_SSID, sizeof(s_state.wifi_ssid));
+        jettyd_nvs_write_str(JETTYD_PROV_NVS_NAMESPACE, JETTYD_PROV_KEY_WIFI_SSID, s_state.wifi_ssid);
+    }
+    if (s_state.wifi_pass[0] == '\0' && strlen(CONFIG_JETTYD_WIFI_PASSWORD) > 0) {
+        strlcpy(s_state.wifi_pass, CONFIG_JETTYD_WIFI_PASSWORD, sizeof(s_state.wifi_pass));
+        jettyd_nvs_write_str(JETTYD_PROV_NVS_NAMESPACE, JETTYD_PROV_KEY_WIFI_PASS, s_state.wifi_pass);
+    }
+    if (s_state.mqtt_uri[0] == '\0' && strlen(CONFIG_JETTYD_MQTT_URI) > 0) {
+        strlcpy(s_state.mqtt_uri, CONFIG_JETTYD_MQTT_URI, sizeof(s_state.mqtt_uri));
+        jettyd_nvs_write_str(JETTYD_PROV_NVS_NAMESPACE, JETTYD_PROV_KEY_MQTT_URI, s_state.mqtt_uri);
+    }
+#endif
 
     s_state.provisioned = (s_state.device_key[0] != '\0');
 

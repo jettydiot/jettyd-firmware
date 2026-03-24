@@ -1,0 +1,42 @@
+menu "jettyd configuration"
+
+    config JETTYD_FLEET_TOKEN
+        string "Fleet token"
+        default ""
+        help
+            Fleet token from api.jettyd.com/v1/fleet-tokens.
+            Used on first boot to provision the device.
+            After provisioning this is replaced by a per-device key.
+
+    config JETTYD_MQTT_URI
+        string "MQTT broker URI"
+        default "mqtt://mqtt.jettyd.com:1883"
+        help
+            URI of the jettyd MQTT broker.
+
+    config JETTYD_WIFI_SSID
+        string "WiFi SSID"
+        default ""
+        help
+            Your WiFi network name.
+
+    config JETTYD_WIFI_PASSWORD
+        string "WiFi password"
+        default ""
+        help
+            Your WiFi password. Leave empty for open networks.
+
+    config JETTYD_FIRMWARE_VERSION
+        string "Firmware version"
+        default "0.1.0"
+        help
+            Firmware version string reported to the platform.
+
+    config JETTYD_DEVICE_TYPE
+        string "Device type slug"
+        default "esp32-generic"
+        help
+            Device type slug from api.jettyd.com/v1/device-types.
+            Used during provisioning to identify the hardware.
+
+endmenu

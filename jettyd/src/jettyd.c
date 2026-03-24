@@ -19,6 +19,7 @@
  */
 
 #include "jettyd.h"
+#include "sdkconfig.h"
 #include "jettyd_nvs.h"
 #include "jettyd_wifi.h"
 #include "jettyd_mqtt.h"
@@ -40,9 +41,18 @@
 
 static const char *TAG = "jettyd";
 
-/* Compile-time constants — set by auto-generated driver_manifest.h */
+/* Firmware version and device type — set via Kconfig (sdkconfig.defaults) */
+#ifdef CONFIG_JETTYD_FIRMWARE_VERSION
+const char *JETTYD_FIRMWARE_VERSION = CONFIG_JETTYD_FIRMWARE_VERSION;
+#else
 const char *JETTYD_FIRMWARE_VERSION = "0.0.0";
-const char *JETTYD_DEVICE_TYPE = "unknown";
+#endif
+
+#ifdef CONFIG_JETTYD_DEVICE_TYPE
+const char *JETTYD_DEVICE_TYPE = CONFIG_JETTYD_DEVICE_TYPE;
+#else
+const char *JETTYD_DEVICE_TYPE = "esp32-generic";
+#endif
 
 static jettyd_config_t s_config = {0};
 
