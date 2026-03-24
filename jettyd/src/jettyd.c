@@ -32,7 +32,6 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_timer.h"
-#include "esp_task_wdt.h"
 #include <time.h>
 #include "cJSON.h"
 #include "freertos/FreeRTOS.h"
@@ -377,10 +376,8 @@ esp_err_t jettyd_start(void)
     ESP_LOGI(TAG, "  Heartbeats: %d", jettyd_vm_get_state()->heartbeat_count);
     ESP_LOGI(TAG, "═══════════════════════════════════════");
 
-    /* Step 15: Main loop — watchdog feed + shadow persistence */
+    /* Step 15: Main loop — shadow persistence */
     while (1) {
-        /* Feed watchdog */
-        esp_task_wdt_reset();
 
         /* Periodically persist shadow */
         jettyd_shadow_persist();
