@@ -55,6 +55,12 @@ typedef struct {
 esp_err_t jettyd_init(const jettyd_config_t *config);
 
 /**
+ * @brief Register all compiled-in drivers (auto-generated or user-defined).
+ * Implement this in your project to register drivers with the registry.
+ */
+void jettyd_register_drivers(void);
+
+/**
  * @brief Start the Jettyd runtime.
  *
  * Connects WiFi, performs provisioning if needed, connects MQTT,

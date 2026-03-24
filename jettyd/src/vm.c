@@ -31,7 +31,7 @@ static const char *TAG = "jettyd_vm";
  * Arena is reset at the start of each jettyd_vm_load_config() call.
  * Size: 8KB comfortably holds a config with 16 rules + 8 heartbeats.
  * ─────────────────────────────────────────────────────────────────────── */
-#define JETTYD_VM_PARSE_ARENA_SIZE (8 * 1024)
+#define JETTYD_VM_PARSE_ARENA_SIZE (4 * 1024)
 static uint8_t  s_cjson_arena[JETTYD_VM_PARSE_ARENA_SIZE];
 static size_t   s_cjson_arena_pos = 0;
 
@@ -611,7 +611,7 @@ esp_err_t jettyd_vm_persist_to_nvs(void)
 {
     /* Serialize VM config to NVS using static buffer — no heap allocation.
      * Buffer size: 4KB accommodates up to 16 rules + 8 heartbeats with metadata. */
-    static char config_buf[4096];
+    static char config_buf[2048];
     int pos = 0;
     int rem = (int)sizeof(config_buf);
 
