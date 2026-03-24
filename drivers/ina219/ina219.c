@@ -144,30 +144,30 @@ void ina219_register(const char *instance, const void *config)
 
     memset(&s_driver, 0, sizeof(s_driver));
     strncpy(s_driver.instance, instance, JETTYD_MAX_INSTANCE_NAME - 1);
-    strncpy(s_driver.driver_name, "ina219", sizeof(s_driver.driver_name) - 1);
+    strlcpy(s_driver.driver_name, "ina219", sizeof(s_driver.driver_name));
 
     s_driver.capability_count = 3;
 
-    strncpy(s_driver.capabilities[0].name, "voltage", sizeof(s_driver.capabilities[0].name) - 1);
+    strlcpy(s_driver.capabilities[0].name, "voltage", sizeof(s_driver.capabilities[0].name));
     s_driver.capabilities[0].type = JETTYD_CAP_READABLE;
     s_driver.capabilities[0].value_type = JETTYD_VAL_FLOAT;
     s_driver.capabilities[0].min_value = 0;
     s_driver.capabilities[0].max_value = 26;
-    strncpy(s_driver.capabilities[0].unit, "V", sizeof(s_driver.capabilities[0].unit) - 1);
+    strlcpy(s_driver.capabilities[0].unit, "V", sizeof(s_driver.capabilities[0].unit));
 
-    strncpy(s_driver.capabilities[1].name, "current", sizeof(s_driver.capabilities[1].name) - 1);
+    strlcpy(s_driver.capabilities[1].name, "current", sizeof(s_driver.capabilities[1].name));
     s_driver.capabilities[1].type = JETTYD_CAP_READABLE;
     s_driver.capabilities[1].value_type = JETTYD_VAL_FLOAT;
     s_driver.capabilities[1].min_value = -3.2f;
     s_driver.capabilities[1].max_value = 3.2f;
-    strncpy(s_driver.capabilities[1].unit, "A", sizeof(s_driver.capabilities[1].unit) - 1);
+    strlcpy(s_driver.capabilities[1].unit, "A", sizeof(s_driver.capabilities[1].unit));
 
-    strncpy(s_driver.capabilities[2].name, "power", sizeof(s_driver.capabilities[2].name) - 1);
+    strlcpy(s_driver.capabilities[2].name, "power", sizeof(s_driver.capabilities[2].name));
     s_driver.capabilities[2].type = JETTYD_CAP_READABLE;
     s_driver.capabilities[2].value_type = JETTYD_VAL_FLOAT;
     s_driver.capabilities[2].min_value = 0;
     s_driver.capabilities[2].max_value = 83.2f;
-    strncpy(s_driver.capabilities[2].unit, "W", sizeof(s_driver.capabilities[2].unit) - 1);
+    strlcpy(s_driver.capabilities[2].unit, "W", sizeof(s_driver.capabilities[2].unit));
 
     s_driver.init = ina219_init;
     s_driver.deinit = ina219_deinit;

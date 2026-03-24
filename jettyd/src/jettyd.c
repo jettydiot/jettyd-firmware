@@ -324,7 +324,7 @@ esp_err_t jettyd_start(void)
     /* Step 8: Publish device manifest to shadow */
     {
         jettyd_value_t fw_val = {.type = JETTYD_VAL_STRING, .valid = true};
-        strncpy(fw_val.str_val, s_config.firmware_version, sizeof(fw_val.str_val) - 1);
+        strlcpy(fw_val.str_val, s_config.firmware_version, sizeof(fw_val.str_val));
         jettyd_shadow_update_system("firmware_version", fw_val);
         jettyd_shadow_publish();
     }

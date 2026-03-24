@@ -179,23 +179,23 @@ void dht22_register(const char *instance, const void *config)
 
     memset(&s_driver, 0, sizeof(s_driver));
     strncpy(s_driver.instance, instance, JETTYD_MAX_INSTANCE_NAME - 1);
-    strncpy(s_driver.driver_name, "dht22", sizeof(s_driver.driver_name) - 1);
+    strlcpy(s_driver.driver_name, "dht22", sizeof(s_driver.driver_name));
 
     s_driver.capability_count = 2;
 
-    strncpy(s_driver.capabilities[0].name, "temperature", sizeof(s_driver.capabilities[0].name) - 1);
+    strlcpy(s_driver.capabilities[0].name, "temperature", sizeof(s_driver.capabilities[0].name));
     s_driver.capabilities[0].type = JETTYD_CAP_READABLE;
     s_driver.capabilities[0].value_type = JETTYD_VAL_FLOAT;
     s_driver.capabilities[0].min_value = -40.0f;
     s_driver.capabilities[0].max_value = 80.0f;
-    strncpy(s_driver.capabilities[0].unit, "\xC2\xB0""C", sizeof(s_driver.capabilities[0].unit) - 1);
+    strlcpy(s_driver.capabilities[0].unit, "\xC2\xB0""C", sizeof(s_driver.capabilities[0].unit));
 
-    strncpy(s_driver.capabilities[1].name, "humidity", sizeof(s_driver.capabilities[1].name) - 1);
+    strlcpy(s_driver.capabilities[1].name, "humidity", sizeof(s_driver.capabilities[1].name));
     s_driver.capabilities[1].type = JETTYD_CAP_READABLE;
     s_driver.capabilities[1].value_type = JETTYD_VAL_FLOAT;
     s_driver.capabilities[1].min_value = 0.0f;
     s_driver.capabilities[1].max_value = 100.0f;
-    strncpy(s_driver.capabilities[1].unit, "%", sizeof(s_driver.capabilities[1].unit) - 1);
+    strlcpy(s_driver.capabilities[1].unit, "%", sizeof(s_driver.capabilities[1].unit));
 
     s_driver.init = dht22_init;
     s_driver.read = dht22_read;

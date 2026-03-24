@@ -80,10 +80,10 @@ static void provision_response_handler(const char *topic, const char *data, int 
 
     json_extract_str(data, data_len, "tenant_id", tenant_id, sizeof(tenant_id));
 
-    strncpy(s_resp_device_id, device_id, sizeof(s_resp_device_id) - 1);
-    strncpy(s_resp_device_key, device_key, sizeof(s_resp_device_key) - 1);
+    strlcpy(s_resp_device_id, device_id, sizeof(s_resp_device_id));
+    strlcpy(s_resp_device_key, device_key, sizeof(s_resp_device_key));
     if (tenant_id[0]) {
-        strncpy(s_resp_tenant_id, tenant_id, sizeof(s_resp_tenant_id) - 1);
+        strlcpy(s_resp_tenant_id, tenant_id, sizeof(s_resp_tenant_id));
     }
     xEventGroupSetBits(s_prov_event_group, PROV_RESPONSE_BIT);
 }
@@ -213,10 +213,10 @@ esp_err_t jettyd_provision_run(void)
     }
 
     /* Store credentials in state and NVS */
-    strncpy(s_state.device_id, s_resp_device_id, sizeof(s_state.device_id) - 1);
-    strncpy(s_state.device_key, s_resp_device_key, sizeof(s_state.device_key) - 1);
+    strlcpy(s_state.device_id, s_resp_device_id, sizeof(s_state.device_id));
+    strlcpy(s_state.device_key, s_resp_device_key, sizeof(s_state.device_key));
     if (s_resp_tenant_id[0] != '\0') {
-        strncpy(s_state.tenant_id, s_resp_tenant_id, sizeof(s_state.tenant_id) - 1);
+        strlcpy(s_state.tenant_id, s_resp_tenant_id, sizeof(s_state.tenant_id));
     }
     s_state.provisioned = true;
 

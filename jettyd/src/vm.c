@@ -92,7 +92,7 @@ esp_err_t jettyd_vm_load_config(const char *json, int json_len,
     }
     if ((size_t)json_len > JETTYD_VM_CONFIG_MAX_SIZE) {
         if (errors && error_count) {
-            strncpy(errors[0].error, "Config exceeds 4KB limit", sizeof(errors[0].error) - 1);
+            strlcpy(errors[0].error, "Config exceeds 4KB limit", sizeof(errors[0].error));
             *error_count = 1;
         }
         return ESP_ERR_INVALID_ARG;
@@ -105,7 +105,7 @@ esp_err_t jettyd_vm_load_config(const char *json, int json_len,
     cJSON *root = cJSON_ParseWithLength(json, json_len);
     if (root == NULL) {
         if (errors && error_count) {
-            strncpy(errors[0].error, "Invalid JSON", sizeof(errors[0].error) - 1);
+            strlcpy(errors[0].error, "Invalid JSON", sizeof(errors[0].error));
             *error_count = 1;
         }
         return ESP_ERR_INVALID_ARG;
@@ -116,8 +116,7 @@ esp_err_t jettyd_vm_load_config(const char *json, int json_len,
     if (!cJSON_IsNumber(version) || version->valueint != 1) {
         cJSON_Delete(root);
         if (errors && error_count) {
-            strncpy(errors[0].error, "Unsupported config version (expected 1)",
-                    sizeof(errors[0].error) - 1);
+            strlcpy(errors[0].error, "Unsupported config version (expected 1)", sizeof(errors[0].error));
             *error_count = 1;
         }
         return ESP_ERR_INVALID_ARG;
@@ -200,7 +199,7 @@ static esp_err_t parse_rules(cJSON *rules_arr, jettyd_vm_error_t *errors, uint8_
         /* id */
         cJSON *id = cJSON_GetObjectItem(rule_obj, "id");
         if (cJSON_IsString(id)) {
-            strncpy(rule->id, id->valuestring, sizeof(rule->id) - 1);
+            strlcpy(rule->id, id->valuestring, sizeof(rule->id));
         } else {
             snprintf(rule->id, sizeof(rule->id), "r%d", i);
         }
@@ -303,14 +302,12 @@ static esp_err_t parse_rules(cJSON *rules_arr, jettyd_vm_error_t *errors, uint8_
                         cJSON *msg = cJSON_GetObjectItem(params, "message");
                         cJSON *sev = cJSON_GetObjectItem(params, "severity");
                         if (cJSON_IsString(msg)) {
-                            strncpy(act->alert.message, msg->valuestring,
-                                    sizeof(act->alert.message) - 1);
+                            strlcpy(act->alert.message, msg->valuestring, sizeof(act->alert.message));
                         }
                         if (cJSON_IsString(sev)) {
-                            strncpy(act->alert.severity, sev->valuestring,
-                                    sizeof(act->alert.severity) - 1);
+                            strlcpy(act->alert.severity, sev->valuestring, sizeof(act->alert.severity));
                         } else {
-                            strncpy(act->alert.severity, "info", sizeof(act->alert.severity) - 1);
+                            strlcpy(act->alert.severity, "info", sizeof(act->alert.severity));
                         }
                     }
                 } else if (strcmp(atype, "sleep") == 0) {
@@ -380,8 +377,7 @@ static esp_err_t parse_condition(cJSON *obj, jettyd_condition_t *cond,
         cJSON *debounce = cJSON_GetObjectItem(obj, "debounce");
 
         if (cJSON_IsString(sensor)) {
-            strncpy(cond->threshold.sensor, sensor->valuestring,
-                    sizeof(cond->threshold.sensor) - 1);
+            strlcpy(cond->threshold.sensor, sensor->valuestring, sizeof(cond->threshold.sensor));
 
             /* Validate sensor exists in driver registry */
             if (jettyd_driver_find_capability(sensor->valuestring) == NULL &&
@@ -415,8 +411,7 @@ static esp_err_t parse_condition(cJSON *obj, jettyd_condition_t *cond,
         cJSON *debounce = cJSON_GetObjectItem(obj, "debounce");
 
         if (cJSON_IsString(sensor)) {
-            strncpy(cond->range.sensor, sensor->valuestring,
-                    sizeof(cond->range.sensor) - 1);
+            strlcpy(cond->range.sensor, sensor->valuestring, sizeof(cond->range.sensor));
             if (jettyd_driver_find_capability(sensor->valuestring) == NULL &&
                 strncmp(sensor->valuestring, "system.", 7) != 0) {
                 if (errors && *err_count < JETTYD_VM_MAX_ERRORS) {
@@ -527,7 +522,7 @@ static esp_err_t parse_heartbeats(cJSON *hb_arr, jettyd_vm_error_t *errors, uint
 
         cJSON *id = cJSON_GetObjectItem(hb_obj, "id");
         if (cJSON_IsString(id)) {
-            strncpy(hb->id, id->valuestring, sizeof(hb->id) - 1);
+            strlcpy(hb->id, id->valuestring, sizeof(hb->id));
         } else {
             snprintf(hb->id, sizeof(hb->id), "h%d", i);
         }
@@ -995,7 +990,7 @@ esp_err_t jettyd_vm_enter_failsafe(const char *reason)
     if (s_vm.heartbeat_count == 0) {
         const jettyd_config_t *cfg = jettyd_get_config();
         s_vm.heartbeat_count = 1;
-        strncpy(s_vm.heartbeats[0].id, "default", sizeof(s_vm.heartbeats[0].id) - 1);
+        strlcpy(s_vm.heartbeats[0].id, "default", sizeof(s_vm.heartbeats[0].id));
         s_vm.heartbeats[0].interval_sec = cfg ? cfg->heartbeat_interval_sec : 60;
         s_vm.heartbeats[0].metric_count = 0; /* Report all */
     }

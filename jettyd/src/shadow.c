@@ -42,7 +42,7 @@ static shadow_entry_t *find_or_create_entry(const char *key)
     /* Create new */
     for (int i = 0; i < MAX_SHADOW_ENTRIES; i++) {
         if (!s_reported[i].used) {
-            strncpy(s_reported[i].key, key, sizeof(s_reported[i].key) - 1);
+            strlcpy(s_reported[i].key, key, sizeof(s_reported[i].key));
             s_reported[i].used = true;
             return &s_reported[i];
         }

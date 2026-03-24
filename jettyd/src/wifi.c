@@ -106,9 +106,9 @@ esp_err_t jettyd_wifi_connect_with(const char *ssid, const char *password)
     }
 
     wifi_config_t wifi_config = {0};
-    strncpy((char *)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid) - 1);
+    strlcpy((char *)wifi_config.sta.ssid, ssid, sizeof(wifi_config.sta.ssid));
     if (password != NULL) {
-        strncpy((char *)wifi_config.sta.password, password, sizeof(wifi_config.sta.password) - 1);
+        strlcpy((char *)wifi_config.sta.password, password, sizeof(wifi_config.sta.password));
     }
     wifi_config.sta.threshold.authmode = (password && password[0]) ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
 

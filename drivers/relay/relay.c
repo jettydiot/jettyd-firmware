@@ -141,10 +141,10 @@ void relay_register(const char *instance, const void *config)
 
     memset(&s_driver, 0, sizeof(s_driver));
     strncpy(s_driver.instance, instance, JETTYD_MAX_INSTANCE_NAME - 1);
-    strncpy(s_driver.driver_name, "relay", sizeof(s_driver.driver_name) - 1);
+    strlcpy(s_driver.driver_name, "relay", sizeof(s_driver.driver_name));
 
     s_driver.capability_count = 1;
-    strncpy(s_driver.capabilities[0].name, "state", sizeof(s_driver.capabilities[0].name) - 1);
+    strlcpy(s_driver.capabilities[0].name, "state", sizeof(s_driver.capabilities[0].name));
     s_driver.capabilities[0].type = JETTYD_CAP_SWITCHABLE;
     s_driver.capabilities[0].value_type = JETTYD_VAL_BOOL;
     s_driver.capabilities[0].min_value = 0;

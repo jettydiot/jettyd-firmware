@@ -223,17 +223,15 @@ void ds18b20_register(const char *instance, const void *config)
 
     memset(&s_driver, 0, sizeof(s_driver));
     strncpy(s_driver.instance, instance, JETTYD_MAX_INSTANCE_NAME - 1);
-    strncpy(s_driver.driver_name, "ds18b20", sizeof(s_driver.driver_name) - 1);
+    strlcpy(s_driver.driver_name, "ds18b20", sizeof(s_driver.driver_name));
 
     s_driver.capability_count = 1;
-    strncpy(s_driver.capabilities[0].name, "temperature",
-            sizeof(s_driver.capabilities[0].name) - 1);
+    strlcpy(s_driver.capabilities[0].name, "temperature", sizeof(s_driver.capabilities[0].name));
     s_driver.capabilities[0].type = JETTYD_CAP_READABLE;
     s_driver.capabilities[0].value_type = JETTYD_VAL_FLOAT;
     s_driver.capabilities[0].min_value = -55.0f;
     s_driver.capabilities[0].max_value = 125.0f;
-    strncpy(s_driver.capabilities[0].unit, "\xC2\xB0""C",
-            sizeof(s_driver.capabilities[0].unit) - 1);
+    strlcpy(s_driver.capabilities[0].unit, "\xC2\xB0""C", sizeof(s_driver.capabilities[0].unit));
 
     s_driver.init = ds18b20_init;
     s_driver.read = ds18b20_read;

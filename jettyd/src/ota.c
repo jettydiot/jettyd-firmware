@@ -125,8 +125,7 @@ esp_err_t jettyd_ota_handle(const jettyd_ota_notification_t *notification)
     }
 
     /* Save OTA state before reboot */
-    strncpy(s_ota_state.target_version, notification->version,
-            sizeof(s_ota_state.target_version) - 1);
+    strlcpy(s_ota_state.target_version, notification->version, sizeof(s_ota_state.target_version));
     s_ota_state.update_pending = true;
     s_ota_state.retry_count = 0;
     jettyd_nvs_write_blob(JETTYD_NVS_NS_OTA, "ota_state",
@@ -189,10 +188,10 @@ void jettyd_ota_mqtt_handler(const char *topic, const char *data, int data_len)
         return;
     }
 
-    strncpy(notif.version, version->valuestring, sizeof(notif.version) - 1);
-    strncpy(notif.url, url->valuestring, sizeof(notif.url) - 1);
+    strlcpy(notif.version, version->valuestring, sizeof(notif.version));
+    strlcpy(notif.url, url->valuestring, sizeof(notif.url));
     if (cJSON_IsString(checksum)) {
-        strncpy(notif.checksum, checksum->valuestring, sizeof(notif.checksum) - 1);
+        strlcpy(notif.checksum, checksum->valuestring, sizeof(notif.checksum));
     }
     if (cJSON_IsNumber(size)) {
         notif.size = (uint32_t)size->valuedouble;
