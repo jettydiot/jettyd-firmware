@@ -53,7 +53,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
         /* Re-subscribe to all registered topics under spinlock */
         portENTER_CRITICAL(&s_subs_spinlock);
         uint8_t count = s_sub_count;
-        mqtt_subscription_t subs_copy[MAX_SUBSCRIPTIONS];
+        static mqtt_subscription_t subs_copy[MAX_SUBSCRIPTIONS];
         memcpy(subs_copy, s_subs, count * sizeof(mqtt_subscription_t));
         portEXIT_CRITICAL(&s_subs_spinlock);
 
@@ -82,7 +82,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
         /* Snapshot subscriptions under spinlock */
         portENTER_CRITICAL(&s_subs_spinlock);
         uint8_t data_count = s_sub_count;
-        mqtt_subscription_t data_subs_copy[MAX_SUBSCRIPTIONS];
+        static mqtt_subscription_t data_subs_copy[MAX_SUBSCRIPTIONS];
         memcpy(data_subs_copy, s_subs, data_count * sizeof(mqtt_subscription_t));
         portEXIT_CRITICAL(&s_subs_spinlock);
 

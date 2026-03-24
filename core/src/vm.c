@@ -25,6 +25,33 @@
 
 static const char *TAG = "jettyd_vm";
 
+/* ── cJSON arena allocator ─────────────────────────────────────────────────
+ * All cJSON parsing uses a pre-allocated static arena, never the system heap.
+ * Arena is reset at the start of each jettyd_vm_load_config() call.
+ * Size: 8KB comfortably holds a config with 16 rules + 8 heartbeats.
+ * ─────────────────────────────────────────────────────────────────────── */
+#define JETTYD_VM_PARSE_ARENA_SIZE (8 * 1024)
+static uint8_t  s_cjson_arena[JETTYD_VM_PARSE_ARENA_SIZE];
+static size_t   s_cjson_arena_pos = 0;
+
+static void *cjson_arena_malloc(size_t sz)
+{
+    sz = (sz + 7u) & ~7u; /* 8-byte align */
+    if (s_cjson_arena_pos + sz > sizeof(s_cjson_arena)) {
+        ESP_LOGE("vm_arena", "Arena exhausted (%u + %u > %u)",
+                 (unsigned)s_cjson_arena_pos, (unsigned)sz,
+                 (unsigned)sizeof(s_cjson_arena));
+        return NULL;
+    }
+    void *p = &s_cjson_arena[s_cjson_arena_pos];
+    s_cjson_arena_pos += sz;
+    return p;
+}
+
+static void cjson_arena_free(void *p) { (void)p; /* arena: no individual frees */ }
+
+
+
 static jettyd_vm_state_t s_vm = {0};
 static TaskHandle_t s_vm_task = NULL;
 static bool s_running = false;
@@ -70,6 +97,10 @@ esp_err_t jettyd_vm_load_config(const char *json, int json_len,
         return ESP_ERR_INVALID_ARG;
     }
 
+    /* Reset arena and install arena allocator hooks — no heap allocation */
+    s_cjson_arena_pos = 0;
+    cJSON_Hooks arena_hooks = { .malloc_fn = cjson_arena_malloc, .free_fn = cjson_arena_free };
+    cJSON_InitHooks(&arena_hooks);
     cJSON *root = cJSON_ParseWithLength(json, json_len);
     if (root == NULL) {
         if (errors && error_count) {
@@ -132,6 +163,7 @@ esp_err_t jettyd_vm_load_config(const char *json, int json_len,
     }
 
     cJSON_Delete(root);
+    cJSON_InitHooks(NULL); /* restore system malloc/free after parse */
 
     if (error_count) {
         *error_count = err_idx;
@@ -576,48 +608,38 @@ esp_err_t jettyd_vm_load_from_nvs(void)
 
 esp_err_t jettyd_vm_persist_to_nvs(void)
 {
-    /* We store the raw JSON, not the parsed state.
-     * For simplicity, re-serialize from state. */
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddNumberToObject(root, "version", 1);
+    /* Serialize VM config to NVS using static buffer — no heap allocation.
+     * Buffer size: 4KB accommodates up to 16 rules + 8 heartbeats with metadata. */
+    static char config_buf[4096];
+    int pos = 0;
+    int rem = (int)sizeof(config_buf);
 
-    /* Serialize rules */
-    cJSON *rules_arr = cJSON_CreateArray();
+#define APPEND(...) do { int n = snprintf(config_buf + pos, rem, __VA_ARGS__); if (n < 0 || n >= rem) return ESP_ERR_NO_MEM; pos += n; rem -= n; } while(0)
+
+    APPEND("{"version":1,"rules":[");
     for (uint8_t i = 0; i < s_vm.rule_count; i++) {
-        cJSON *rule = cJSON_CreateObject();
-        cJSON_AddStringToObject(rule, "id", s_vm.rules[i].id);
-        cJSON_AddBoolToObject(rule, "enabled", s_vm.rules[i].enabled);
-        /* Condition and actions would need full serialization here.
-         * For NVS persistence, we store the original JSON blob instead. */
-        cJSON_AddItemToArray(rules_arr, rule);
+        if (i > 0) APPEND(",");
+        APPEND("{"id":"%s","enabled":%s}",
+               s_vm.rules[i].id,
+               s_vm.rules[i].enabled ? "true" : "false");
     }
-    cJSON_AddItemToObject(root, "rules", rules_arr);
-
-    cJSON *hb_arr = cJSON_CreateArray();
+    APPEND("],"heartbeats":[");
     for (uint8_t i = 0; i < s_vm.heartbeat_count; i++) {
-        cJSON *hb = cJSON_CreateObject();
-        cJSON_AddStringToObject(hb, "id", s_vm.heartbeats[i].id);
-        cJSON_AddNumberToObject(hb, "every", s_vm.heartbeats[i].interval_sec);
-        cJSON *metrics = cJSON_CreateArray();
+        if (i > 0) APPEND(",");
+        APPEND("{"id":"%s","every":%lu,"metrics":[",
+               s_vm.heartbeats[i].id,
+               (unsigned long)s_vm.heartbeats[i].interval_sec);
         for (uint8_t m = 0; m < s_vm.heartbeats[i].metric_count; m++) {
-            cJSON_AddItemToArray(metrics, cJSON_CreateString(s_vm.heartbeats[i].metrics[m]));
+            if (m > 0) APPEND(",");
+            APPEND(""%s"", s_vm.heartbeats[i].metrics[m]);
         }
-        cJSON_AddItemToObject(hb, "metrics", metrics);
-        cJSON_AddItemToArray(hb_arr, hb);
+        APPEND("]}");
     }
-    cJSON_AddItemToObject(root, "heartbeats", hb_arr);
+    APPEND("]}");
 
-    char *json_str = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
+#undef APPEND
 
-    if (json_str == NULL) {
-        return ESP_ERR_NO_MEM;
-    }
-
-    size_t len = strlen(json_str);
-    esp_err_t err = jettyd_nvs_write_blob(JETTYD_NVS_NS_VM, "config", json_str, len);
-    cJSON_free(json_str);
-    return err;
+    return jettyd_nvs_write_blob(JETTYD_NVS_NS_VM, "config", config_buf, (size_t)pos);
 }
 
 /* ───────────────────────────── Evaluation Engine ──────────────────────────── */
@@ -927,28 +949,25 @@ void jettyd_vm_config_handler(const char *topic, const char *data, int data_len)
             jettyd_mqtt_publish(topic_buf, ack, 1, false);
         }
     } else {
-        /* Rejection with error details */
-        cJSON *reject = cJSON_CreateObject();
-        cJSON_AddStringToObject(reject, "type", "config_rejected");
-        cJSON *err_arr = cJSON_CreateArray();
+        /* Rejection with error details — static buffer, no heap allocation */
+        static char reject_buf[1024];
+        int rpos = 0;
+        int rrem = (int)sizeof(reject_buf);
+#define RAPP(...) do { int n = snprintf(reject_buf + rpos, rrem, __VA_ARGS__); if (n > 0 && n < rrem) { rpos += n; rrem -= n; } } while(0)
+        RAPP("{"type":"config_rejected","errors":[");
         for (uint8_t i = 0; i < error_count; i++) {
-            cJSON *e = cJSON_CreateObject();
+            if (i > 0) RAPP(",");
             if (errors[i].rule_id[0]) {
-                cJSON_AddStringToObject(e, "rule", errors[i].rule_id);
+                RAPP("{"rule":"%s","error":"%s"}", errors[i].rule_id, errors[i].error);
+            } else {
+                RAPP("{"error":"%s"}", errors[i].error);
             }
-            cJSON_AddStringToObject(e, "error", errors[i].error);
-            cJSON_AddItemToArray(err_arr, e);
         }
-        cJSON_AddItemToObject(reject, "errors", err_arr);
-
-        char *json_str = cJSON_PrintUnformatted(reject);
-        cJSON_Delete(reject);
-
-        if (json_str &&
-            jettyd_mqtt_build_topic(topic_buf, sizeof(topic_buf), "alert") == ESP_OK) {
-            jettyd_mqtt_publish(topic_buf, json_str, 1, false);
+        RAPP("]}");
+#undef RAPP
+        if (jettyd_mqtt_build_topic(topic_buf, sizeof(topic_buf), "alert") == ESP_OK) {
+            jettyd_mqtt_publish(topic_buf, reject_buf, 1, false);
         }
-        if (json_str) cJSON_free(json_str);
     }
 }
 

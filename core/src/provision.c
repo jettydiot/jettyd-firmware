@@ -7,7 +7,6 @@
 #include "jettyd_nvs.h"
 #include "jettyd_mqtt.h"
 #include "esp_log.h"
-#include "cJSON.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include <string.h>
@@ -26,33 +25,64 @@ static char s_resp_device_id[64];
 static char s_resp_device_key[128];
 static char s_resp_tenant_id[64];
 
+/**
+ * @brief Extract a JSON string field from a flat JSON object without heap allocation.
+ *        Only works for simple flat objects with string values.
+ */
+static bool json_extract_str(const char *json, int json_len,
+                               const char *key, char *out, size_t out_len)
+{
+    /* Find "key": */
+    char needle[64];
+    int needle_len = snprintf(needle, sizeof(needle), "\"%s\":", key);
+    if (needle_len <= 0) return false;
+
+    const char *p = json;
+    const char *end = json + json_len;
+    while (p < end - needle_len) {
+        if (strncmp(p, needle, needle_len) == 0) {
+            p += needle_len;
+            /* Skip whitespace */
+            while (p < end && (*p == ' ' || *p == '\t')) p++;
+            if (p >= end || *p != '\"') return false;
+            p++; /* skip opening quote */
+            size_t i = 0;
+            while (p < end && *p != '\"' && i < out_len - 1) {
+                out[i++] = *p++;
+            }
+            out[i] = '\0';
+            return i > 0;
+        }
+        p++;
+    }
+    return false;
+}
+
 static void provision_response_handler(const char *topic, const char *data, int data_len)
 {
     ESP_LOGI(TAG, "Provisioning response received");
 
-    /* data is MQTT payload — size is bounded by MQTT message limit */
-    cJSON *root = cJSON_ParseWithLength(data, data_len);
-    if (root == NULL) {
-        ESP_LOGE(TAG, "Failed to parse provisioning response");
+    /* Parse response without dynamic allocation */
+    char device_id[64] = {0};
+    char device_key[128] = {0};
+    char tenant_id[64] = {0};
+
+    bool ok = json_extract_str(data, data_len, "device_id", device_id, sizeof(device_id))
+           && json_extract_str(data, data_len, "device_key", device_key, sizeof(device_key));
+
+    if (!ok) {
+        ESP_LOGE(TAG, "Invalid provisioning response format");
         return;
     }
 
-    cJSON *device_id = cJSON_GetObjectItem(root, "device_id");
-    cJSON *device_key = cJSON_GetObjectItem(root, "device_key");
-    cJSON *tenant_id = cJSON_GetObjectItem(root, "tenant_id");
+    json_extract_str(data, data_len, "tenant_id", tenant_id, sizeof(tenant_id));
 
-    if (cJSON_IsString(device_id) && cJSON_IsString(device_key)) {
-        strncpy(s_resp_device_id, device_id->valuestring, sizeof(s_resp_device_id) - 1);
-        strncpy(s_resp_device_key, device_key->valuestring, sizeof(s_resp_device_key) - 1);
-        if (cJSON_IsString(tenant_id)) {
-            strncpy(s_resp_tenant_id, tenant_id->valuestring, sizeof(s_resp_tenant_id) - 1);
-        }
-        xEventGroupSetBits(s_prov_event_group, PROV_RESPONSE_BIT);
-    } else {
-        ESP_LOGE(TAG, "Invalid provisioning response format");
+    strncpy(s_resp_device_id, device_id, sizeof(s_resp_device_id) - 1);
+    strncpy(s_resp_device_key, device_key, sizeof(s_resp_device_key) - 1);
+    if (tenant_id[0]) {
+        strncpy(s_resp_tenant_id, tenant_id, sizeof(s_resp_tenant_id) - 1);
     }
-
-    cJSON_Delete(root);
+    xEventGroupSetBits(s_prov_event_group, PROV_RESPONSE_BIT);
 }
 
 esp_err_t jettyd_provision_init(void)

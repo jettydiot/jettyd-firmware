@@ -8,6 +8,7 @@
 #include "jettyd_provision.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
+#include "esp_timer.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
@@ -19,8 +20,8 @@ static const char *TAG = "jettyd_wifi";
 #define WIFI_FAIL_BIT       BIT1
 
 static EventGroupHandle_t s_wifi_event_group;
-static jettyd_wifi_state_t s_state = JETTYD_WIFI_DISCONNECTED;
-static int s_retry_count = 0;
+static volatile jettyd_wifi_state_t s_state = JETTYD_WIFI_DISCONNECTED;
+static volatile int s_retry_count = 0;
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                 int32_t event_id, void *event_data)
@@ -32,7 +33,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         s_state = JETTYD_WIFI_CONNECTING;
         s_retry_count++;
 
-        /* Exponential backoff: min(init * 2^retry, max) */
+        /* Exponential backoff via esp_timer — never block the event task */
         uint32_t delay_ms = JETTYD_WIFI_BACKOFF_INIT_MS;
         for (int i = 0; i < s_retry_count && delay_ms < JETTYD_WIFI_BACKOFF_MAX_MS; i++) {
             delay_ms *= 2;
@@ -42,8 +43,19 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         }
 
         ESP_LOGW(TAG, "WiFi disconnected, retry %d in %lu ms", s_retry_count, (unsigned long)delay_ms);
-        vTaskDelay(pdMS_TO_TICKS(delay_ms));
-        esp_wifi_connect();
+
+        /* Schedule reconnect via one-shot timer to avoid blocking the event loop */
+        esp_timer_handle_t retry_timer;
+        esp_timer_create_args_t timer_args = {
+            .callback = (esp_timer_cb_t)esp_wifi_connect,
+            .name = "wifi_retry",
+        };
+        if (esp_timer_create(&timer_args, &retry_timer) == ESP_OK) {
+            esp_timer_start_once(retry_timer, (uint64_t)delay_ms * 1000);
+        } else {
+            /* Fallback: connect immediately */
+            esp_wifi_connect();
+        }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         ESP_LOGI(TAG, "Connected, IP: " IPSTR, IP2STR(&event->ip_info.ip));
