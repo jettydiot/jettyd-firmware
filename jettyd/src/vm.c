@@ -582,7 +582,7 @@ static jettyd_op_t parse_op(const char *op_str)
 
 esp_err_t jettyd_vm_load_from_nvs(void)
 {
-    char buf[JETTYD_VM_CONFIG_MAX_SIZE];
+    static char buf[JETTYD_VM_CONFIG_MAX_SIZE];
     size_t len = sizeof(buf);
     esp_err_t err = jettyd_nvs_read_blob(JETTYD_NVS_NS_VM, "config", buf, &len);
     if (err != ESP_OK) {

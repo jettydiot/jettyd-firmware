@@ -62,7 +62,7 @@ esp_err_t jettyd_shadow_init(void)
 
     /* Try to load last shadow from NVS */
     size_t len = JETTYD_SHADOW_MAX_SIZE;
-    char buf[JETTYD_SHADOW_MAX_SIZE];
+    static char buf[JETTYD_SHADOW_MAX_SIZE];
     esp_err_t err = jettyd_nvs_read_blob(JETTYD_NVS_NS_SHADOW, "shadow", buf, &len);
     if (err == ESP_OK && len > 0) {
         ESP_LOGI(TAG, "Loaded shadow from NVS (%d bytes)", (int)len);
@@ -189,7 +189,7 @@ int jettyd_shadow_serialize(char *buf, size_t buf_len)
 
 esp_err_t jettyd_shadow_publish(void)
 {
-    char buf[JETTYD_SHADOW_MAX_SIZE];
+    static char buf[JETTYD_SHADOW_MAX_SIZE];
     int len = jettyd_shadow_serialize(buf, sizeof(buf));
     if (len < 0) {
         ESP_LOGE(TAG, "Failed to serialize shadow");
@@ -207,7 +207,7 @@ esp_err_t jettyd_shadow_publish(void)
 
 esp_err_t jettyd_shadow_persist(void)
 {
-    char buf[JETTYD_SHADOW_MAX_SIZE];
+    static char buf[JETTYD_SHADOW_MAX_SIZE];
     int len = jettyd_shadow_serialize(buf, sizeof(buf));
     if (len < 0) {
         return ESP_FAIL;
