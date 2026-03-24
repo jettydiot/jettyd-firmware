@@ -83,7 +83,7 @@ async function reviewFile(filePath) {
   console.log(`\n=== Safety Review: ${fileName} ===\n`);
 
   const message = await client.messages.create({
-    model: "claude-opus-4-20250901",
+    model: "claude-opus-4-6",
     max_tokens: 4096,
     messages: [
       {
