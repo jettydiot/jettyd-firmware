@@ -74,6 +74,15 @@ typedef struct {
     /* Optional */
     esp_err_t (*calibrate)(const char *type);       /**< e.g., "dry", "wet" */
     esp_err_t (*self_test)(void);                   /**< Returns OK if hardware responds */
+
+    /**
+     * @brief Dispatch a named command (e.g. from MQTT command topic).
+     *
+     * @param action      Dot-namespaced action string, e.g. "led.blink"
+     * @param params_json Optional JSON params string, or NULL
+     * @return ESP_OK on success, ESP_ERR_NOT_SUPPORTED if action unknown
+     */
+    esp_err_t (*command)(const char *action, const char *params_json);
 } jettyd_driver_t;
 
 /** Registration macro — called in each driver's register function */
