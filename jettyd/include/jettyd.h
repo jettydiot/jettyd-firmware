@@ -58,7 +58,22 @@ esp_err_t jettyd_init(const jettyd_config_t *config);
  * @brief Register all compiled-in drivers (auto-generated or user-defined).
  * Implement this in your project to register drivers with the registry.
  */
-void jettyd_register_drivers(void);
+/**
+ * @brief Register application drivers.
+ *
+ * Define this function in your own main/ component to register your drivers.
+ * The SDK provides a weak no-op default — you do NOT need to edit the SDK.
+ *
+ * Example in your main/driver_registry.c:
+ * @code
+ *   #include "led.h"
+ *   void jettyd_register_drivers(void) {
+ *       led_config_t cfg = { .pin = 8, .active_high = true };
+ *       led_register("status", &cfg);
+ *   }
+ * @endcode
+ */
+void jettyd_register_drivers(void) __attribute__((weak));
 
 /**
  * @brief Start the Jettyd runtime.
