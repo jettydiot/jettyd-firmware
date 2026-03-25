@@ -71,10 +71,11 @@ static esp_err_t led_init(const void *config)
     return ESP_OK;
 }
 
-static esp_err_t led_switch_on(void)
+static esp_err_t led_switch_on(uint32_t duration_ms)
 {
     if (s_blink_timer) xTimerStop(s_blink_timer, 0);
     set_gpio(true);
+    (void)duration_ms; /* TODO: auto-off timer */
     return ESP_OK;
 }
 
@@ -85,10 +86,11 @@ static esp_err_t led_switch_off(void)
     return ESP_OK;
 }
 
-static float led_read(const char *metric)
+static jettyd_value_t led_read(const char *metric)
 {
-    if (strcmp(metric, "state") == 0) return s_state ? 1.0f : 0.0f;
-    return 0.0f;
+    jettyd_value_t v = { .type = JETTYD_VAL_BOOL, .valid = true };
+    v.bool_val = s_state;
+    return v;
 }
 
 static esp_err_t led_command(const char *action, const char *params_json)
@@ -127,19 +129,18 @@ void led_register(const char *instance, const void *config)
 {
     memset(&s_driver, 0, sizeof(s_driver));
     strlcpy(s_driver.driver_name, "led", sizeof(s_driver.driver_name));
-    strlcpy(s_driver.instance_name, instance, sizeof(s_driver.instance_name));
-    s_driver.driver_type = JETTYD_DRIVER_ACTUATOR;
+    strlcpy(s_driver.instance, instance, sizeof(s_driver.instance));
 
     s_driver.capabilities[0].name[0] = '\0';
     strlcpy(s_driver.capabilities[0].name, "state", sizeof(s_driver.capabilities[0].name));
-    s_driver.capabilities[0].type = JETTYD_CAP_BOOL;
+    s_driver.capabilities[0].type = JETTYD_CAP_SWITCHABLE;
+    s_driver.capabilities[0].value_type = JETTYD_VAL_BOOL;
     s_driver.capability_count = 1;
 
     s_driver.init       = led_init;
     s_driver.read       = led_read;
     s_driver.switch_on  = led_switch_on;
     s_driver.switch_off = led_switch_off;
-    s_driver.command    = led_command;
 
     jettyd_driver_registry_add(&s_driver);
 }

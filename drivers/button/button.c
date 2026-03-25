@@ -71,25 +71,34 @@ static esp_err_t button_init(const void *config)
     return ESP_OK;
 }
 
-static float button_read(const char *metric)
+static jettyd_value_t button_read(const char *metric)
 {
-    if (strcmp(metric, "press") == 0) return s_pressed ? 1.0f : 0.0f;
-    if (strcmp(metric, "press_count") == 0) return (float)s_press_count;
-    return 0.0f;
+    jettyd_value_t v = { .valid = true };
+    if (strcmp(metric, "press") == 0) {
+        v.type = JETTYD_VAL_BOOL;
+        v.bool_val = s_pressed;
+    } else if (strcmp(metric, "press_count") == 0) {
+        v.type = JETTYD_VAL_FLOAT;
+        v.float_val = (float)s_press_count;
+    } else {
+        v.valid = false;
+    }
+    return v;
 }
 
 void button_register(const char *instance, const void *config)
 {
     memset(&s_driver, 0, sizeof(s_driver));
     strlcpy(s_driver.driver_name, "button", sizeof(s_driver.driver_name));
-    strlcpy(s_driver.instance_name, instance, sizeof(s_driver.instance_name));
-    s_driver.driver_type = JETTYD_DRIVER_SENSOR;
+    strlcpy(s_driver.instance, instance, sizeof(s_driver.instance));
 
     strlcpy(s_driver.capabilities[0].name, "press", sizeof(s_driver.capabilities[0].name));
-    s_driver.capabilities[0].type = JETTYD_CAP_BOOL;
+    s_driver.capabilities[0].type = JETTYD_CAP_READABLE;
+    s_driver.capabilities[0].value_type = JETTYD_VAL_BOOL;
 
     strlcpy(s_driver.capabilities[1].name, "press_count", sizeof(s_driver.capabilities[1].name));
-    s_driver.capabilities[1].type = JETTYD_CAP_FLOAT;
+    s_driver.capabilities[1].type = JETTYD_CAP_READABLE;
+    s_driver.capabilities[1].value_type = JETTYD_VAL_FLOAT;
 
     s_driver.capability_count = 2;
     s_driver.init = button_init;
