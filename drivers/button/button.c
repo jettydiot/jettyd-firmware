@@ -94,7 +94,6 @@ void button_register(const char *instance, const void *config)
     s_driver.capability_count = 2;
     s_driver.init = button_init;
     s_driver.read = button_read;
-    s_driver.config_ptr = config;
 
-    jettyd_driver_register(&s_driver);
+    jettyd_driver_registry_add(&s_driver);
 }

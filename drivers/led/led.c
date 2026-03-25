@@ -140,7 +140,6 @@ void led_register(const char *instance, const void *config)
     s_driver.switch_on  = led_switch_on;
     s_driver.switch_off = led_switch_off;
     s_driver.command    = led_command;
-    s_driver.config_ptr = config;
 
-    jettyd_driver_register(&s_driver);
+    jettyd_driver_registry_add(&s_driver);
 }
