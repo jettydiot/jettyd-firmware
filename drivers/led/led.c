@@ -96,11 +96,11 @@ static jettyd_value_t led_read(const char *metric)
 static esp_err_t led_command(const char *action, const char *params_json)
 {
     if (strcmp(action, "led.on") == 0) {
-        return led_switch_on();
+        return led_switch_on(0);
     } else if (strcmp(action, "led.off") == 0) {
         return led_switch_off();
     } else if (strcmp(action, "led.toggle") == 0) {
-        return s_state ? led_switch_off() : led_switch_on();
+        return s_state ? led_switch_off() : led_switch_on(0);
     } else if (strcmp(action, "led.blink") == 0) {
         /* Parse interval_ms and count from params — use defaults if absent */
         int interval_ms = 500;
