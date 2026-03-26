@@ -61,6 +61,7 @@ typedef enum {
     JETTYD_ACTION_ALERT,
     JETTYD_ACTION_SLEEP,
     JETTYD_ACTION_SET_HEARTBEAT,
+    JETTYD_ACTION_BLINK,            /**< Blink a driver at interval_ms */
 } jettyd_action_type_t;
 
 /** Forward declaration for compound conditions */
@@ -116,6 +117,9 @@ typedef struct {
         struct {
             uint32_t duration_sec;  /**< Auto-off after N seconds, 0 = indefinite */
         } switch_on;
+        struct {
+            uint32_t interval_ms;       /**< Blink interval in milliseconds */
+        } blink;
 
         struct {
             float value;

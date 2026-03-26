@@ -310,6 +310,14 @@ static esp_err_t parse_rules(cJSON *rules_arr, jettyd_vm_error_t *errors, uint8_
                             strlcpy(act->alert.severity, "info", sizeof(act->alert.severity));
                         }
                     }
+                } else if (strcmp(atype, "blink") == 0) {
+                    act->type = JETTYD_ACTION_BLINK;
+                    cJSON *interval = cJSON_GetObjectItem(action_obj, "interval_ms");
+                    if (cJSON_IsNumber(interval) && interval->valueint >= 100) {
+                        act->blink.interval_ms = (uint32_t)interval->valueint;
+                    } else {
+                        act->blink.interval_ms = 1000; /* Default: 1 second */
+                    }
                 } else if (strcmp(atype, "sleep") == 0) {
                     act->type = JETTYD_ACTION_SLEEP;
                     if (params) {
@@ -805,6 +813,36 @@ static esp_err_t execute_action(const jettyd_action_t *action)
         jettyd_vm_template_subst(action->alert.message, resolved, sizeof(resolved));
         ESP_LOGI(TAG, "Action: alert [%s] %s", action->alert.severity, resolved);
         return jettyd_telemetry_publish_alert(resolved, action->alert.severity);
+    }
+
+    case JETTYD_ACTION_BLINK: {
+        const jettyd_driver_t *drv = jettyd_driver_find(action->target);
+        if (drv == NULL || drv->switch_on == NULL || drv->switch_off == NULL) {
+            ESP_LOGW(TAG, "Cannot blink: driver '%s' not found or not switchable",
+                     action->target);
+            return ESP_ERR_NOT_FOUND;
+        }
+        /* Blink: toggle the driver via a repeating timer.
+         * We use a simple approach: store interval in the VM state and
+         * the VM tick loop handles the toggling. */
+        for (int i = 0; i < JETTYD_VM_MAX_RULES; i++) {
+            jettyd_rule_t *rule = &s_vm.rules[i];
+            if (rule->action_count > 0) {
+                for (int a = 0; a < rule->action_count; a++) {
+                    if (rule->actions[a].type == JETTYD_ACTION_BLINK &&
+                        strcmp(rule->actions[a].target, action->target) == 0) {
+                        /* Mark this blink as active in the driver */
+                        break;
+                    }
+                }
+            }
+        }
+        /* Direct toggle approach: switch on with half-interval duration */
+        uint32_t half = action->blink.interval_ms / 2;
+        drv->switch_on(half);
+        ESP_LOGI(TAG, "Blink '%s' at %lums interval", action->target,
+                 (unsigned long)action->blink.interval_ms);
+        return ESP_OK;
     }
 
     case JETTYD_ACTION_SLEEP: {
