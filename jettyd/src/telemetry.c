@@ -11,6 +11,7 @@
 #include "esp_log.h"
 #include <stdbool.h>
 #include "esp_system.h"
+#include "driver/temperature_sensor.h"
 #include "esp_timer.h"
 #include <string.h>
 #include <stdio.h>
@@ -99,6 +100,23 @@ static int add_metric_to_buf(char *buf, size_t buf_len, int pos,
         } else if (strcmp(sys_key, "heap_free") == 0) {
             val.type = JETTYD_VAL_INT;
             val.int_val = (int32_t)heap;
+        } else if (strcmp(sys_key, "chip_temp") == 0) {
+            /* Internal die temperature (ESP32-S3/C3/C6) */
+            static temperature_sensor_handle_t s_temp_handle = NULL;
+            if (s_temp_handle == NULL) {
+                temperature_sensor_config_t temp_cfg = TEMPERATURE_SENSOR_CONFIG_DEFAULT(-10, 80);
+                if (temperature_sensor_install(&temp_cfg, &s_temp_handle) == ESP_OK) {
+                    temperature_sensor_enable(s_temp_handle);
+                }
+            }
+            if (s_temp_handle != NULL) {
+                float chip_temp = 0.0f;
+                temperature_sensor_get_celsius(s_temp_handle, &chip_temp);
+                val.type = JETTYD_VAL_FLOAT;
+                val.float_val = chip_temp;
+            } else {
+                return pos;
+            }
         } else {
             return pos;
         }
