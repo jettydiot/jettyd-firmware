@@ -37,6 +37,7 @@ static uint32_t s_last_reported_count = 0;
 /* ISR — just note the time, debounce in the poll task */
 static void IRAM_ATTR gpio_isr_handler(void *arg)
 {
+    (void)arg;
     int64_t now = esp_timer_get_time();
     int64_t debounce_us = s_cfg.debounce_ms ? (int64_t)s_cfg.debounce_ms * 1000 : 50000;
     if (now - s_last_edge_us < debounce_us) return;
@@ -61,7 +62,7 @@ static void IRAM_ATTR gpio_isr_handler(void *arg)
  */
 static void button_event_task(void *arg)
 {
-    const char *metrics[] = { "press", "press_count" };
+    (void)arg;
     char press_metric[48];
     char count_metric[48];
     snprintf(press_metric, sizeof(press_metric), "%s.press", s_instance);

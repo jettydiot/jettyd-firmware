@@ -6,30 +6,9 @@
  * logic without real hardware.
  */
 
-#include <stdio.h>
-#include <string.h>
-#include <assert.h>
-#include <stdbool.h>
-#include <stdint.h>
-
-/* ───────────────────────────── Mock ESP-IDF ───────────────────────────────── */
-
-typedef int esp_err_t;
-#define ESP_OK              0
-#define ESP_FAIL            (-1)
-#define ESP_ERR_INVALID_ARG 0x102
-#define ESP_ERR_NO_MEM      0x101
-#define ESP_ERR_INVALID_STATE 0x103
-
-#define ESP_LOGI(tag, fmt, ...) printf("[I] " fmt "\n", ##__VA_ARGS__)
-#define ESP_LOGW(tag, fmt, ...) printf("[W] " fmt "\n", ##__VA_ARGS__)
-#define ESP_LOGE(tag, fmt, ...) printf("[E] " fmt "\n", ##__VA_ARGS__)
-
-/* Include driver header directly */
+/* ESP-IDF stubs for host testing */
+#include "mocks/esp_idf_stubs.h"
 #include "jettyd_driver.h"
-
-/* Include the driver_registry.c source for host testing */
-/* In production this links via ESP-IDF components */
 
 /* ───────────────────────────── Test Framework ─────────────────────────────── */
 

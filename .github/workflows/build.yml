@@ -45,6 +45,11 @@ jobs:
           cd firmware
           python3 build.py device.yaml main/driver_registry.c
 
+      - name: Run host unit tests
+        run: |
+          cd jettyd-sdk/test && make
+          echo "✅ Unit tests passed"
+
       - name: Check for format specifier issues
         run: |
           HITS=$(grep -rn '%[di]' \
