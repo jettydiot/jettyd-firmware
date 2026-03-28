@@ -399,5 +399,10 @@ esp_err_t jettyd_start(void)
  */
 __attribute__((weak)) void jettyd_register_drivers(void)
 {
-    /* No drivers registered by default. Override in your project. */
+    /* SDK weak stub — this should be overridden by main/driver_registry.c.
+     * If you see this message, the linker is not picking up the user's
+     * generated driver_registry.c. Check that main/driver_registry.c exists
+     * and is listed in main/CMakeLists.txt SRCS. Run: rm -rf build && idf.py build */
+    ESP_LOGW(TAG, "⚠️  SDK stub jettyd_register_drivers() called — no drivers registered!");
+    ESP_LOGW(TAG, "   Run: rm -rf build && idf.py build");
 }
