@@ -27,4 +27,6 @@ idf_component_register(
         driver
         app_update
         esp_partition
+    PRIV_REQUIRES
+        esp_driver_tsens
 )

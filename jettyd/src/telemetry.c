@@ -11,7 +11,12 @@
 #include "esp_log.h"
 #include <stdbool.h>
 #include "esp_system.h"
+#if __has_include("driver/temperature_sensor.h") && defined(SOC_TEMP_SENSOR_SUPPORTED)
 #include "driver/temperature_sensor.h"
+#define JETTYD_HAS_TEMP_SENSOR 1
+#else
+#define JETTYD_HAS_TEMP_SENSOR 0
+#endif
 #include "esp_timer.h"
 #include <string.h>
 #include <stdio.h>
@@ -101,6 +106,7 @@ static int add_metric_to_buf(char *buf, size_t buf_len, int pos,
             val.type = JETTYD_VAL_INT;
             val.int_val = (int32_t)heap;
         } else if (strcmp(sys_key, "chip_temp") == 0) {
+#if JETTYD_HAS_TEMP_SENSOR
             /* Internal die temperature (ESP32-S3/C3/C6) */
             static temperature_sensor_handle_t s_temp_handle = NULL;
             if (s_temp_handle == NULL) {
@@ -117,6 +123,9 @@ static int add_metric_to_buf(char *buf, size_t buf_len, int pos,
             } else {
                 return pos;
             }
+#else
+            return pos; /* Temperature sensor not available on this target */
+#endif
         } else {
             return pos;
         }
