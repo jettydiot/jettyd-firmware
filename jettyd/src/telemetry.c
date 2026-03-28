@@ -26,9 +26,31 @@ static const char *TAG = "jettyd_telem";
 
 static const jettyd_config_t *s_config = NULL;
 
+#if JETTYD_HAS_TEMP_SENSOR
+static temperature_sensor_handle_t s_temp_handle = NULL;
+#endif
+
 esp_err_t jettyd_telemetry_init(void)
 {
     s_config = jettyd_get_config();
+
+#if JETTYD_HAS_TEMP_SENSOR
+    temperature_sensor_config_t temp_cfg = TEMPERATURE_SENSOR_CONFIG_DEFAULT(-10, 80);
+    esp_err_t err = temperature_sensor_install(&temp_cfg, &s_temp_handle);
+    if (err == ESP_OK) {
+        err = temperature_sensor_enable(s_temp_handle);
+        if (err == ESP_OK) {
+            ESP_LOGI(TAG, "Chip temperature sensor initialised");
+        } else {
+            ESP_LOGW(TAG, "Chip temp sensor enable failed: %s", esp_err_to_name(err));
+            s_temp_handle = NULL;
+        }
+    } else {
+        ESP_LOGW(TAG, "Chip temp sensor install failed: %s", esp_err_to_name(err));
+        s_temp_handle = NULL;
+    }
+#endif
+
     ESP_LOGI(TAG, "Telemetry initialized");
     return ESP_OK;
 }
@@ -107,24 +129,18 @@ static int add_metric_to_buf(char *buf, size_t buf_len, int pos,
             val.int_val = (int32_t)heap;
         } else if (strcmp(sys_key, "chip_temp") == 0) {
 #if JETTYD_HAS_TEMP_SENSOR
-            /* Internal die temperature (ESP32-S3/C3/C6) */
-            static temperature_sensor_handle_t s_temp_handle = NULL;
-            if (s_temp_handle == NULL) {
-                temperature_sensor_config_t temp_cfg = TEMPERATURE_SENSOR_CONFIG_DEFAULT(-10, 80);
-                if (temperature_sensor_install(&temp_cfg, &s_temp_handle) == ESP_OK) {
-                    temperature_sensor_enable(s_temp_handle);
-                }
-            }
             if (s_temp_handle != NULL) {
                 float chip_temp = 0.0f;
                 temperature_sensor_get_celsius(s_temp_handle, &chip_temp);
                 val.type = JETTYD_VAL_FLOAT;
                 val.float_val = chip_temp;
             } else {
+                ESP_LOGW(TAG, "chip_temp requested but sensor not available");
                 return pos;
             }
 #else
-            return pos; /* Temperature sensor not available on this target */
+            ESP_LOGW(TAG, "chip_temp not supported on this target");
+            return pos;
 #endif
         } else {
             return pos;
