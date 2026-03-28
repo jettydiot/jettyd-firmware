@@ -46,11 +46,30 @@ static volatile uint32_t s_press_count   = 0;
 static volatile int64_t  s_press_time_us = 0;   /* when current press started */
 static volatile int64_t  s_last_edge_us  = 0;
 
-/* Task-side state */
-static uint32_t s_last_reported_count = 0;
-static int64_t  s_last_release_us     = 0;   /* for double-press detection */
-static bool     s_long_press_fired    = false;
-static bool     s_was_pressed         = false;
+/*
+ * Task-side state machine
+ *
+ *   IDLE ──press──► ARMED ──hold≥long──► LONG_FIRED
+ *                      │
+ *                   release
+ *                      │
+ *                   PENDING ──timeout──► emit SHORT, → IDLE
+ *                      │
+ *                   press again within double_ms
+ *                      │
+ *                   emit DOUBLE, wait for release → IDLE
+ */
+typedef enum {
+    BTN_IDLE,
+    BTN_ARMED,       /* pressed, not yet determined */
+    BTN_LONG_FIRED,  /* long press already emitted, waiting for release */
+    BTN_PENDING,     /* released once, waiting to see if double press follows */
+} btn_state_t;
+
+static btn_state_t s_state           = BTN_IDLE;
+static uint32_t    s_armed_count     = 0;    /* press_count when we entered ARMED */
+static int64_t     s_arm_time_us     = 0;    /* when ARMED was entered */
+static int64_t     s_release_time_us = 0;    /* when we entered PENDING */
 
 /* ── ISR ─────────────────────────────────────────────────────────────────── */
 
@@ -78,71 +97,87 @@ static void button_event_task(void *arg)
 {
     (void)arg;
 
-    /* Build metric name strings once */
     char m_press[48], m_count[48], m_long[48], m_double[48];
     snprintf(m_press,  sizeof(m_press),  "%s.press",        s_instance);
     snprintf(m_count,  sizeof(m_count),  "%s.press_count",  s_instance);
     snprintf(m_long,   sizeof(m_long),   "%s.long_press",   s_instance);
     snprintf(m_double, sizeof(m_double), "%s.double_press", s_instance);
 
-    uint32_t long_ms   = s_cfg.long_press_ms   ? s_cfg.long_press_ms   : 500;
-    uint32_t double_ms = s_cfg.double_press_ms ? s_cfg.double_press_ms : 300;
+    int64_t long_us   = (int64_t)(s_cfg.long_press_ms   ? s_cfg.long_press_ms   : 500) * 1000;
+    int64_t double_us = (int64_t)(s_cfg.double_press_ms ? s_cfg.double_press_ms : 300) * 1000;
 
     while (1) {
-        vTaskDelay(pdMS_TO_TICKS(50));
+        vTaskDelay(pdMS_TO_TICKS(20)); /* 20ms tick for responsive detection */
 
         int64_t  now     = esp_timer_get_time();
-        bool     pressed = s_pressed;          /* snapshot volatile */
+        bool     pressed = s_pressed;
         uint32_t count   = s_press_count;
 
-        /* ── Long press detection ──────────────────────────────────────── */
-        if (pressed && s_press_time_us > 0 && !s_long_press_fired
-                && s_cfg.long_press_ms != 0) {
-            int64_t held_ms = (now - s_press_time_us) / 1000;
-            if (held_ms >= (int64_t)long_ms) {
-                s_long_press_fired = true;
-                ESP_LOGI(TAG, "Button '%s' long press (held %" PRId64 "ms)", s_instance, held_ms);
+        switch (s_state) {
+
+        case BTN_IDLE:
+            if (pressed) {
+                s_state       = BTN_ARMED;
+                s_armed_count = count;
+                s_arm_time_us = now;
+            }
+            break;
+
+        case BTN_ARMED:
+            if (!pressed) {
+                /* Released — could still be a double press, wait */
+                s_state          = BTN_PENDING;
+                s_release_time_us = now;
+            } else if (s_cfg.long_press_ms != 0
+                       && (now - s_arm_time_us) >= long_us) {
+                /* Held long enough — fire long press immediately */
+                int64_t held_ms = (now - s_arm_time_us) / 1000;
+                ESP_LOGI(TAG, "Button '%s' long press (held %" PRId64 "ms)",
+                         s_instance, held_ms);
                 const char *metrics[] = { m_long, m_press, m_count };
                 jettyd_telemetry_publish(metrics, 3);
+                s_state = BTN_LONG_FIRED;
             }
-        }
+            break;
 
-        /* ── Press/release edge (task side) ──────────────────────────── */
-        if (pressed && !s_was_pressed) {
-            /* Rising edge — press started */
-            s_long_press_fired = false;
-        }
+        case BTN_LONG_FIRED:
+            /* Wait for release before accepting next press */
+            if (!pressed) {
+                s_state = BTN_IDLE;
+            }
+            break;
 
-        if (!pressed && s_was_pressed) {
-            /* Falling edge — button released */
-            s_last_release_us = now;
-        }
-
-        s_was_pressed = pressed;
-
-        /* ── New short press (count advanced) ────────────────────────── */
-        if (count != s_last_reported_count) {
-            s_last_reported_count = count;
-
-            /* Only emit short-press event if it wasn't a long press */
-            if (!s_long_press_fired) {
-                /* Double press: was there a recent release? */
-                bool is_double = (s_cfg.double_press_ms != 0)
-                    && (s_last_release_us > 0)
-                    && ((now - s_last_release_us) / 1000 < (int64_t)double_ms);
-
-                if (is_double) {
+        case BTN_PENDING:
+            if (pressed) {
+                /* Second press — is it within the double-press window? */
+                if (s_cfg.double_press_ms != 0
+                    && (now - s_release_time_us) < double_us) {
+                    /* Fire double press immediately on second press-down */
                     ESP_LOGI(TAG, "Button '%s' double press (total: %" PRIu32 ")",
                              s_instance, count);
                     const char *metrics[] = { m_double, m_press, m_count };
                     jettyd_telemetry_publish(metrics, 3);
+                    s_state = BTN_LONG_FIRED; /* reuse "wait for release" state */
                 } else {
+                    /* Outside double window — treat as new single press */
                     ESP_LOGI(TAG, "Button '%s' press (total: %" PRIu32 ")",
-                             s_instance, count);
+                             s_instance, s_armed_count);
                     const char *metrics[] = { m_press, m_count };
                     jettyd_telemetry_publish(metrics, 2);
+                    /* Start tracking this new press */
+                    s_state       = BTN_ARMED;
+                    s_armed_count = count;
+                    s_arm_time_us = now;
                 }
+            } else if ((now - s_release_time_us) >= double_us) {
+                /* Double-press window expired — commit as single press */
+                ESP_LOGI(TAG, "Button '%s' press (total: %" PRIu32 ")",
+                         s_instance, s_armed_count);
+                const char *metrics[] = { m_press, m_count };
+                jettyd_telemetry_publish(metrics, 2);
+                s_state = BTN_IDLE;
             }
+            break;
         }
     }
 }
