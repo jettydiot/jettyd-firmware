@@ -58,7 +58,7 @@ static esp_err_t soil_init(const void *config)
         return err;
     }
 
-    ESP_LOGI(TAG, "Soil moisture init: pin=%d, ch=%d, dry=%d, wet=%d",
+    ESP_LOGI(TAG, "Soil moisture init: pin=%d, ch=%d, dry=%u, wet=%u",
              s_cfg.pin, s_channel, s_cfg.dry_value, s_cfg.wet_value);
     return ESP_OK;
 }

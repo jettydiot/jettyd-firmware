@@ -1,0 +1,59 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [esp32s3, esp32c3, esp32c6]
+
+    steps:
+      - name: Checkout SDK
+        uses: actions/checkout@v4
+        with:
+          path: jettyd-sdk
+
+      - name: Checkout firmware template (test harness)
+        uses: actions/checkout@v4
+        with:
+          repository: jettydiot/jettyd-firmware-template
+          path: firmware
+
+      - name: Wire SDK into template
+        run: |
+          # Replace the cloned SDK with the current branch under test
+          rm -rf firmware/jettyd-sdk
+          ln -s ${{ github.workspace }}/jettyd-sdk firmware/jettyd-sdk
+
+      - name: Set up ESP-IDF
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.3.2
+          target: ${{ matrix.target }}
+          path: firmware
+
+      - name: Run build.py codegen
+        run: |
+          cd firmware
+          python3 build.py device.yaml main/driver_registry.c
+
+      - name: Check for format specifier issues
+        run: |
+          HITS=$(grep -rn '%[di]' \
+            jettyd-sdk/drivers/ jettyd-sdk/jettyd/src/ 2>/dev/null | \
+            grep -v 'PRIu32\|PRId32\|%lu\|%u\|//' | \
+            grep -E 'interval_sec|debounce_ms|freq_hz|max_on_duration|press_count|heap_free|uptime') || true
+          if [ -n "$HITS" ]; then
+            echo "❌ uint32_t field with %d format — use PRIu32 or (int) cast:"
+            echo "$HITS"
+            exit 1
+          fi
+          echo "✅ Format specifiers OK"
