@@ -228,7 +228,7 @@ static jettyd_value_t button_read(const char *metric)
         v.float_val = (float)s_press_count;
     } else if (strcmp(metric, "long_press") == 0) {
         v.type     = JETTYD_VAL_BOOL;
-        v.bool_val = s_long_press_fired;
+        v.bool_val = (s_state == BTN_LONG_FIRED);
     } else if (strcmp(metric, "double_press") == 0) {
         v.type     = JETTYD_VAL_BOOL;
         v.bool_val = false; /* stateless — events are momentary */
