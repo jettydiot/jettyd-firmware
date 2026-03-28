@@ -144,4 +144,7 @@ void led_register(const char *instance, const void *config)
     s_driver.command    = led_command;
 
     jettyd_driver_registry_add(&s_driver);
+
+    /* Initialise hardware immediately — configures GPIO output. */
+    led_init(config);
 }

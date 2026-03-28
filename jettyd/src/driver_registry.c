@@ -109,6 +109,8 @@ const jettyd_driver_t *jettyd_driver_get(uint8_t index)
     return &s_drivers[index];
 }
 
+
+
 /**
  * @brief Register all compiled-in drivers.
  *

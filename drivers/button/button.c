@@ -146,4 +146,7 @@ void button_register(const char *instance, const void *config)
     s_driver.read = button_read;
 
     jettyd_driver_registry_add(&s_driver);
+
+    /* Initialise hardware immediately — arms GPIO ISR and starts event task. */
+    button_init(config);
 }
