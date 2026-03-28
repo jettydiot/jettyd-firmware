@@ -200,6 +200,14 @@ const jettyd_config_t *jettyd_get_config(void)
     return &s_config;
 }
 
+void jettyd_set_default_config(uint32_t interval_sec, const char **metrics)
+{
+    if (interval_sec > 0) {
+        s_config.heartbeat_interval_sec = interval_sec;
+    }
+    s_config.default_metrics = metrics; /* Caller owns the storage (static in driver_registry.c) */
+}
+
 esp_err_t jettyd_init(const jettyd_config_t *config)
 {
     if (config == NULL) {

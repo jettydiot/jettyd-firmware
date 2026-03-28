@@ -941,6 +941,39 @@ esp_err_t jettyd_vm_start(void)
         return ESP_OK;
     }
 
+    /* If no heartbeats were loaded from NVS config, seed one from the
+     * jettyd_config_t defaults (heartbeat_interval_sec + default_metrics).
+     * This is what makes device.yaml's heartbeat_interval and report_metrics
+     * take effect without requiring a platform-pushed config. */
+    if (s_vm.heartbeat_count == 0) {
+        const jettyd_config_t *cfg = jettyd_get_config();
+        uint32_t interval = (cfg && cfg->heartbeat_interval_sec > 0)
+                            ? cfg->heartbeat_interval_sec : 60;
+
+        jettyd_heartbeat_t *hb = &s_vm.heartbeats[0];
+        memset(hb, 0, sizeof(jettyd_heartbeat_t));
+        strlcpy(hb->id, "default", sizeof(hb->id));
+        hb->interval_sec = interval;
+
+        if (cfg && cfg->default_metrics) {
+            uint8_t m = 0;
+            while (cfg->default_metrics[m] != NULL && m < JETTYD_VM_MAX_METRICS) {
+                strlcpy(hb->metrics[m], cfg->default_metrics[m], sizeof(hb->metrics[m]));
+                m++;
+            }
+            hb->metric_count = m;
+        }
+        /* metric_count == 0 means "publish all" — both cases are handled in vm_tick */
+
+        /* Set last_fired_us far enough in the past that the first tick fires
+         * immediately (publish on connect, then start the timer). */
+        hb->last_fired_us = esp_timer_get_time() - (int64_t)interval * 1000000LL;
+
+        s_vm.heartbeat_count = 1;
+        ESP_LOGI(TAG, "Default heartbeat: interval=%lus, metrics=%d (0=all)",
+                 (unsigned long)interval, hb->metric_count);
+    }
+
     s_running = true;
     BaseType_t ret = xTaskCreate(vm_task, "jettyd_vm", 8192, NULL, 5, &s_vm_task);
     if (ret != pdPASS) {
