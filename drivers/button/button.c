@@ -106,7 +106,7 @@ static esp_err_t button_init(const void *config)
     /* Spawn the event reporting task */
     xTaskCreate(button_event_task, "btn_event", 2048, NULL, 5, NULL);
 
-    ESP_LOGI(TAG, "Button init on GPIO %d (active_%s, debounce %dms)",
+    ESP_LOGI(TAG, "Button init on GPIO %d (active_%s, debounce %"PRIu32"ms)",
              s_cfg.pin, s_cfg.active_low ? "low" : "high", s_cfg.debounce_ms);
     return ESP_OK;
 }
