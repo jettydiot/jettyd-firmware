@@ -1,15 +1,23 @@
 /**
  * @file button.c
- * @brief Button/switch driver — GPIO input with debounce, publishes press events to jettyd.
+ * @brief Button/switch driver — GPIO input with debounce, press event publishing.
  *
- * When the button is pressed, the driver publishes a telemetry event:
- *   metric: "press", value: 1.0
- *   metric: "press_count", value: <total presses since boot>
+ * Events published via jettyd telemetry:
  *
- * The device shadow reports: {"state": "pressed"/"released", "press_count": N}
+ *   instance.press        bool   — true on any press (short or long)
+ *   instance.press_count  float  — total presses since boot
+ *   instance.long_press   bool   — true when long press threshold exceeded
+ *   instance.double_press bool   — true when two presses within double_press_ms
  *
- * Wiring: GPIO pin → button → GND, with internal pull-up enabled (active_low = true).
- *         Or: 3.3V → button → GPIO pin, with active_low = false.
+ * Config:
+ *   pin            GPIO number
+ *   active_low     true = button pulls pin to GND (internal pull-up enabled)
+ *   debounce_ms    edge debounce window (default 50ms)
+ *   long_press_ms  hold duration for long press event (default 500ms, 0=disabled)
+ *   double_press_ms max gap between two presses for double press (default 300ms, 0=disabled)
+ *
+ * Wiring: GPIO pin → button → GND (active_low=true, internal pull-up)
+ *         3.3V → button → GPIO pin (active_low=false, internal pull-down)
  */
 
 #include "button.h"
@@ -26,15 +34,26 @@
 
 static const char *TAG = "drv_button";
 
+/* ── State ───────────────────────────────────────────────────────────────── */
+
 static button_config_t s_cfg;
 static jettyd_driver_t s_driver;
-static volatile bool s_pressed = false;
-static volatile uint32_t s_press_count = 0;
-static int64_t s_last_edge_us = 0;
 static char s_instance[JETTYD_MAX_INSTANCE_NAME];
-static uint32_t s_last_reported_count = 0;
 
-/* ISR — just note the time, debounce in the poll task */
+/* ISR-updated state (volatile) */
+static volatile bool     s_pressed       = false;
+static volatile uint32_t s_press_count   = 0;
+static volatile int64_t  s_press_time_us = 0;   /* when current press started */
+static volatile int64_t  s_last_edge_us  = 0;
+
+/* Task-side state */
+static uint32_t s_last_reported_count = 0;
+static int64_t  s_last_release_us     = 0;   /* for double-press detection */
+static bool     s_long_press_fired    = false;
+static bool     s_was_pressed         = false;
+
+/* ── ISR ─────────────────────────────────────────────────────────────────── */
+
 static void IRAM_ATTR gpio_isr_handler(void *arg)
 {
     (void)arg;
@@ -48,37 +67,87 @@ static void IRAM_ATTR gpio_isr_handler(void *arg)
 
     if (pressed && !s_pressed) {
         s_press_count++;
+        s_press_time_us = now;
     }
     s_pressed = pressed;
 }
 
-/**
- * @brief Event task — polls for new presses and publishes telemetry.
- *
- * Runs at low priority. Wakes every 50 ms, checks if s_press_count has
- * advanced since the last report, and if so logs + publishes telemetry.
- * Kept as a poll loop rather than a notification from the ISR so it stays
- * safe to call FreeRTOS and MQTT APIs without any ISR-safe plumbing.
- */
+/* ── Event task ──────────────────────────────────────────────────────────── */
+
 static void button_event_task(void *arg)
 {
     (void)arg;
-    char press_metric[48];
-    char count_metric[48];
-    snprintf(press_metric, sizeof(press_metric), "%s.press", s_instance);
-    snprintf(count_metric, sizeof(count_metric), "%s.press_count", s_instance);
-    const char *pub_metrics[] = { press_metric, count_metric };
+
+    /* Build metric name strings once */
+    char m_press[48], m_count[48], m_long[48], m_double[48];
+    snprintf(m_press,  sizeof(m_press),  "%s.press",        s_instance);
+    snprintf(m_count,  sizeof(m_count),  "%s.press_count",  s_instance);
+    snprintf(m_long,   sizeof(m_long),   "%s.long_press",   s_instance);
+    snprintf(m_double, sizeof(m_double), "%s.double_press", s_instance);
+
+    uint32_t long_ms   = s_cfg.long_press_ms   ? s_cfg.long_press_ms   : 500;
+    uint32_t double_ms = s_cfg.double_press_ms ? s_cfg.double_press_ms : 300;
 
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(50));
-        uint32_t count = s_press_count; /* single read — volatile, no mutex needed */
+
+        int64_t  now     = esp_timer_get_time();
+        bool     pressed = s_pressed;          /* snapshot volatile */
+        uint32_t count   = s_press_count;
+
+        /* ── Long press detection ──────────────────────────────────────── */
+        if (pressed && s_press_time_us > 0 && !s_long_press_fired
+                && s_cfg.long_press_ms != 0) {
+            int64_t held_ms = (now - s_press_time_us) / 1000;
+            if (held_ms >= (int64_t)long_ms) {
+                s_long_press_fired = true;
+                ESP_LOGI(TAG, "Button '%s' long press (held %" PRId64 "ms)", s_instance, held_ms);
+                const char *metrics[] = { m_long, m_press, m_count };
+                jettyd_telemetry_publish(metrics, 3);
+            }
+        }
+
+        /* ── Press/release edge (task side) ──────────────────────────── */
+        if (pressed && !s_was_pressed) {
+            /* Rising edge — press started */
+            s_long_press_fired = false;
+        }
+
+        if (!pressed && s_was_pressed) {
+            /* Falling edge — button released */
+            s_last_release_us = now;
+        }
+
+        s_was_pressed = pressed;
+
+        /* ── New short press (count advanced) ────────────────────────── */
         if (count != s_last_reported_count) {
             s_last_reported_count = count;
-            ESP_LOGI(TAG, "Button '%s' pressed (total: %" PRIu32 ")", s_instance, count);
-            jettyd_telemetry_publish(pub_metrics, 2);
+
+            /* Only emit short-press event if it wasn't a long press */
+            if (!s_long_press_fired) {
+                /* Double press: was there a recent release? */
+                bool is_double = (s_cfg.double_press_ms != 0)
+                    && (s_last_release_us > 0)
+                    && ((now - s_last_release_us) / 1000 < (int64_t)double_ms);
+
+                if (is_double) {
+                    ESP_LOGI(TAG, "Button '%s' double press (total: %" PRIu32 ")",
+                             s_instance, count);
+                    const char *metrics[] = { m_double, m_press, m_count };
+                    jettyd_telemetry_publish(metrics, 3);
+                } else {
+                    ESP_LOGI(TAG, "Button '%s' press (total: %" PRIu32 ")",
+                             s_instance, count);
+                    const char *metrics[] = { m_press, m_count };
+                    jettyd_telemetry_publish(metrics, 2);
+                }
+            }
         }
     }
 }
+
+/* ── Driver ops ──────────────────────────────────────────────────────────── */
 
 static esp_err_t button_init(const void *config)
 {
@@ -88,27 +157,28 @@ static esp_err_t button_init(const void *config)
 
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << s_cfg.pin),
-        .mode = GPIO_MODE_INPUT,
-        .pull_up_en = s_cfg.active_low ? GPIO_PULLUP_ENABLE : GPIO_PULLUP_DISABLE,
+        .mode         = GPIO_MODE_INPUT,
+        .pull_up_en   = s_cfg.active_low ? GPIO_PULLUP_ENABLE  : GPIO_PULLUP_DISABLE,
         .pull_down_en = s_cfg.active_low ? GPIO_PULLDOWN_DISABLE : GPIO_PULLDOWN_ENABLE,
-        .intr_type = GPIO_INTR_ANYEDGE,
+        .intr_type    = GPIO_INTR_ANYEDGE,
     };
     esp_err_t err = gpio_config(&io_conf);
     if (err != ESP_OK) return err;
 
-    /* gpio_install_isr_service returns ESP_ERR_INVALID_STATE if already
-       installed (e.g. by another driver). That's fine — just continue. */
     esp_err_t isr_err = gpio_install_isr_service(0);
-    if (isr_err != ESP_OK && isr_err != ESP_ERR_INVALID_STATE) {
-        return isr_err;
-    }
+    if (isr_err != ESP_OK && isr_err != ESP_ERR_INVALID_STATE) return isr_err;
     gpio_isr_handler_add(s_cfg.pin, gpio_isr_handler, NULL);
 
-    /* Spawn the event reporting task */
-    xTaskCreate(button_event_task, "btn_event", 2048, NULL, 5, NULL);
+    /* 4096 bytes — needed for float formatting in jettyd_telemetry_publish */
+    xTaskCreate(button_event_task, "btn_event", 4096, NULL, 5, NULL);
 
-    ESP_LOGI(TAG, "Button init on GPIO %d (active_%s, debounce %"PRIu32"ms)",
-             s_cfg.pin, s_cfg.active_low ? "low" : "high", s_cfg.debounce_ms);
+    ESP_LOGI(TAG, "Button init: GPIO %d, active_%s, debounce %"PRIu32"ms, "
+             "long_press %"PRIu32"ms, double_press %"PRIu32"ms",
+             s_cfg.pin,
+             s_cfg.active_low ? "low" : "high",
+             s_cfg.debounce_ms,
+             s_cfg.long_press_ms  ? s_cfg.long_press_ms  : 500U,
+             s_cfg.double_press_ms ? s_cfg.double_press_ms : 300U);
     return ESP_OK;
 }
 
@@ -116,38 +186,52 @@ static jettyd_value_t button_read(const char *metric)
 {
     jettyd_value_t v = { .valid = true };
     if (strcmp(metric, "press") == 0) {
-        v.type = JETTYD_VAL_BOOL;
+        v.type     = JETTYD_VAL_BOOL;
         v.bool_val = s_pressed;
     } else if (strcmp(metric, "press_count") == 0) {
-        v.type = JETTYD_VAL_FLOAT;
+        v.type      = JETTYD_VAL_FLOAT;
         v.float_val = (float)s_press_count;
+    } else if (strcmp(metric, "long_press") == 0) {
+        v.type     = JETTYD_VAL_BOOL;
+        v.bool_val = s_long_press_fired;
+    } else if (strcmp(metric, "double_press") == 0) {
+        v.type     = JETTYD_VAL_BOOL;
+        v.bool_val = false; /* stateless — events are momentary */
     } else {
         v.valid = false;
     }
     return v;
 }
 
+/* ── Registration ────────────────────────────────────────────────────────── */
+
 void button_register(const char *instance, const void *config)
 {
     memset(&s_driver, 0, sizeof(s_driver));
-    strlcpy(s_driver.driver_name, "button", sizeof(s_driver.driver_name));
-    strlcpy(s_driver.instance, instance, sizeof(s_driver.instance));
-    strlcpy(s_instance, instance, sizeof(s_instance));
+    strlcpy(s_driver.driver_name, "button",   sizeof(s_driver.driver_name));
+    strlcpy(s_driver.instance,    instance,   sizeof(s_driver.instance));
+    strlcpy(s_instance,           instance,   sizeof(s_instance));
 
-    strlcpy(s_driver.capabilities[0].name, "press", sizeof(s_driver.capabilities[0].name));
-    s_driver.capabilities[0].type = JETTYD_CAP_READABLE;
+    strlcpy(s_driver.capabilities[0].name, "press",        sizeof(s_driver.capabilities[0].name));
+    s_driver.capabilities[0].type       = JETTYD_CAP_READABLE;
     s_driver.capabilities[0].value_type = JETTYD_VAL_BOOL;
 
-    strlcpy(s_driver.capabilities[1].name, "press_count", sizeof(s_driver.capabilities[1].name));
-    s_driver.capabilities[1].type = JETTYD_CAP_READABLE;
+    strlcpy(s_driver.capabilities[1].name, "press_count",  sizeof(s_driver.capabilities[1].name));
+    s_driver.capabilities[1].type       = JETTYD_CAP_READABLE;
     s_driver.capabilities[1].value_type = JETTYD_VAL_FLOAT;
 
-    s_driver.capability_count = 2;
+    strlcpy(s_driver.capabilities[2].name, "long_press",   sizeof(s_driver.capabilities[2].name));
+    s_driver.capabilities[2].type       = JETTYD_CAP_READABLE;
+    s_driver.capabilities[2].value_type = JETTYD_VAL_BOOL;
+
+    strlcpy(s_driver.capabilities[3].name, "double_press", sizeof(s_driver.capabilities[3].name));
+    s_driver.capabilities[3].type       = JETTYD_CAP_READABLE;
+    s_driver.capabilities[3].value_type = JETTYD_VAL_BOOL;
+
+    s_driver.capability_count = 4;
     s_driver.init = button_init;
     s_driver.read = button_read;
 
     jettyd_driver_registry_add(&s_driver);
-
-    /* Initialise hardware immediately — arms GPIO ISR and starts event task. */
     button_init(config);
 }
