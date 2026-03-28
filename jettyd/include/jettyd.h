@@ -91,16 +91,4 @@ esp_err_t jettyd_start(void);
  */
 const jettyd_config_t *jettyd_get_config(void);
 
-/**
- * @brief Override default heartbeat settings from device.yaml codegen.
- *
- * Called by the auto-generated driver_registry.c (produced by build.py) to
- * inject heartbeat_interval and report_metrics from device.yaml into the
- * runtime config before jettyd_start() kicks off the VM.
- *
- * @param interval_sec   Heartbeat interval in seconds (from device.yaml defaults.heartbeat_interval).
- * @param metrics        NULL-terminated array of dotted metric names, or NULL for "all metrics".
- */
-void jettyd_set_default_config(uint32_t interval_sec, const char **metrics);
-
 #endif /* JETTYD_H */
