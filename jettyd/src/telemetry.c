@@ -11,7 +11,10 @@
 #include "esp_log.h"
 #include <stdbool.h>
 #include "esp_system.h"
-#if __has_include("driver/temperature_sensor.h") && defined(SOC_TEMP_SENSOR_SUPPORTED)
+/* SOC_TEMP_SENSOR_SUPPORTED is defined in soc/soc_caps.h which may not be
+ * included yet when this guard is evaluated. Use the Kconfig equivalent
+ * CONFIG_SOC_TEMP_SENSOR_SUPPORTED which is always available via sdkconfig.h */
+#if __has_include("driver/temperature_sensor.h") && defined(CONFIG_SOC_TEMP_SENSOR_SUPPORTED)
 #include "driver/temperature_sensor.h"
 #define JETTYD_HAS_TEMP_SENSOR 1
 #else
