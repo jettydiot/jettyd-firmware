@@ -9,6 +9,7 @@ idf_component_register(
         "src/wifi.c"
         "src/telemetry.c"
         "src/vm.c"
+        "src/driver_registry.c"
     INCLUDE_DIRS
         "include"
     REQUIRES
