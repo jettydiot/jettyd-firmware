@@ -164,22 +164,13 @@ esp_err_t jettyd_telemetry_publish(const char **metrics, uint8_t metric_count)
     pos += snprintf(telemetry_buf + pos, sizeof(telemetry_buf) - pos,
                     "{\"ts\":%lld,\"readings\":{", (long long)time(NULL));
 
+    /* Publish only the requested metrics — no implicit extras */
     for (uint8_t i = 0; i < metric_count; i++) {
         if (metrics[i]) {
             pos = add_metric_to_buf(telemetry_buf, sizeof(telemetry_buf), pos,
                                     metrics[i], &first);
         }
     }
-
-    /* Always include system metrics */
-    pos = add_metric_to_buf(telemetry_buf, sizeof(telemetry_buf), pos,
-                            "system.battery", &first);
-    pos = add_metric_to_buf(telemetry_buf, sizeof(telemetry_buf), pos,
-                            "system.rssi", &first);
-    pos = add_metric_to_buf(telemetry_buf, sizeof(telemetry_buf), pos,
-                            "system.uptime", &first);
-    pos = add_metric_to_buf(telemetry_buf, sizeof(telemetry_buf), pos,
-                            "system.heap_free", &first);
 
     pos += snprintf(telemetry_buf + pos, sizeof(telemetry_buf) - pos, "}}");
 
