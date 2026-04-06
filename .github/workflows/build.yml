@@ -30,8 +30,10 @@ jobs:
       - name: Wire SDK into template
         run: |
           # Replace the cloned SDK with the current branch under test
+          # Use a relative symlink so it resolves correctly inside the
+          # espressif Docker container (which re-mounts the workspace at /app/…)
           rm -rf firmware/jettyd-sdk
-          ln -s ${{ github.workspace }}/jettyd-sdk firmware/jettyd-sdk
+          ln -s ../jettyd-sdk firmware/jettyd-sdk
 
       - name: Set up ESP-IDF
         uses: espressif/esp-idf-ci-action@v1
