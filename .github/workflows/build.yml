@@ -34,6 +34,9 @@ jobs:
           # espressif Docker container (which re-mounts the workspace at /app/…)
           rm -rf firmware/jettyd-sdk
           ln -s ../jettyd-sdk firmware/jettyd-sdk
+          sed -i "s/target: .*/target: \"${{ matrix.target }}\"/" firmware/device.yaml
+          rm -f firmware/sdkconfig
+          rm -rf firmware/build
 
       - name: Set up ESP-IDF
         uses: espressif/esp-idf-ci-action@v1
