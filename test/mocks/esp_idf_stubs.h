@@ -7,9 +7,13 @@
  * surface area to compile and run logic tests.
  */
 
-#define _POSIX_C_SOURCE 200809L
 #ifndef ESP_IDF_STUBS_H
 #define ESP_IDF_STUBS_H
+
+/* Expose POSIX clocks (clock_gettime, CLOCK_MONOTONIC) under -std=c11 */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
 
 #include <stdio.h>
 #include <string.h>
