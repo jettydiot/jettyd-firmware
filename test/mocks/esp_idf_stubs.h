@@ -103,7 +103,7 @@ typedef uint32_t TickType_t;
 typedef unsigned int UBaseType_t;
 typedef int BaseType_t;
 
-#define xTaskCreate(fn, name, stack, param, prio, handle) (pdPASS)
+#define xTaskCreate(fn, name, stack, param, prio, handle) ((void)(fn), (void)(name), (void)(stack), (void)(param), (void)(prio), (void)(handle), pdPASS)
 #define vTaskDelay(ticks)       ((void)0)
 #define vTaskDelete(handle)     ((void)0)
 #define xTimerCreate(n,p,r,i,cb) (NULL)
