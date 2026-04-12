@@ -11,7 +11,7 @@
 #define ESP_IDF_STUBS_H
 
 #ifndef _POSIX_C_SOURCE
-#define _POSIX_C_SOURCE 199309L
+#define _POSIX_C_SOURCE 200809L
 #endif
 
 #include <stdio.h>

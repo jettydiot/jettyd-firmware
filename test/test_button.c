@@ -17,6 +17,8 @@
 static int s_telemetry_publish_count = 0;
 static char s_last_metrics[8][64];
 static int  s_last_metric_count = 0;
+static uint32_t s_last_reported_count = 0;
+
 
 /* Stub — replaces the real jettyd_telemetry_publish in this TU */
 esp_err_t jettyd_telemetry_publish(const char **metrics, uint8_t metric_count)
