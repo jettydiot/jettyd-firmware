@@ -7,7 +7,7 @@
 #   make clean    — remove build artifacts
 
 CC      := cc
-CFLAGS  := -std=c11 -Wall -Wextra -Werror -g \
+CFLAGS  := -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Werror -g \
            -I. \
            -Imocks \
            -I../jettyd/include \
