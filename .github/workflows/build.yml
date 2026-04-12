@@ -42,6 +42,9 @@ jobs:
           target: ${{ matrix.target }}
           path: firmware
 
+      - name: Fix permissions after Docker
+        run: sudo chown -R $USER:$USER .
+
       - name: Run build.py codegen
         run: |
           cd firmware
