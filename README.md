@@ -2,7 +2,9 @@
 
 Open-source C SDK for ESP-IDF that connects ESP32 devices to [jettyd](https://jettyd.com).
 
-> **Getting started?** Use the [firmware template](https://github.com/jettydiot/jettyd-firmware-template) and follow the **[QuickStart guide →](https://docs.jettyd.com/quickstart)**
+> **Getting started?** Use the [firmware template](https://github.com/jettydiot/jettyd-firmware-template) and follow the **[QuickStart guide →](https://github.com/jettydiot/jettyd-firmware-template/blob/main/QUICKSTART.md)** (also rendered at [docs.jettyd.com/quickstart](https://docs.jettyd.com/quickstart) and shown in-app at [app.jettyd.com](https://app.jettyd.com)).
+>
+> `QUICKSTART.md` in `jettyd-firmware-template` is the **single source of truth** — both the docs site and the dashboard render from it.
 
 ## What this SDK provides
 
