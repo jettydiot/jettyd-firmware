@@ -2,14 +2,10 @@
  * @file rgb_led_matrix.c
  * @brief Driver for Grove RGB LED Matrix 8x8 (STM32F031 + MY9221)
  *
- * I2C register map (verified against Seeed Grove_LED_Matrix_Driver library):
- *   0x04  CMD_SET_DISPLAY_ENABLED   [0x00=off | 0x01=on]
- *   0x05  CMD_SET_DISPLAY_BRIGHTNESS [0-255]
- *   0x10  CMD_SET_COLOR_R            [0-255]
- *   0x11  CMD_SET_COLOR_G            [0-255]
- *   0x12  CMD_SET_COLOR_B            [0-255]
- *   0x20  CMD_SET_ROW_0 .. 0x27 CMD_SET_ROW_7  [0-255 bitmap]
- *   0x28  CMD_DISPLAY_NOW            (trigger refresh, no data byte)
+ * Uses the command-based I2C protocol from the Seeed Grove_Two_RGB_LED_Matrix
+ * library. Named patterns map to built-in emoji (their colors are fixed in
+ * the STM32F031 firmware). Hex bitmap patterns use displayFrames with the
+ * nearest available palette color to the requested RGB.
  */
 
 #include "rgb_led_matrix.h"
@@ -20,151 +16,273 @@
 #include "freertos/task.h"
 #include <string.h>
 #include <stdlib.h>
-#include <stdio.h>
+#include <stdint.h>
+#include <stdbool.h>
 
 static const char *TAG = "drv_matrix";
 
-/* I2C register addresses */
-#define REG_DISPLAY_ENABLED  0x04
-#define REG_BRIGHTNESS       0x05
-#define REG_COLOR_R          0x10
-#define REG_COLOR_G          0x11
-#define REG_COLOR_B          0x12
-#define REG_ROW_BASE         0x20   /* rows 0-7 at 0x20-0x27 */
-#define REG_DISPLAY_NOW      0x28
+/* Command bytes — Seeed Grove_Two_RGB_LED_Matrix protocol */
+#define CMD_DISP_EMOJI       0x02
+#define CMD_DISP_CUSTOM      0x05
+#define CMD_DISP_OFF         0x06
+#define CMD_DISP_COLOR_BLOCK 0x0d
+#define CMD_CONTINUE_DATA    0x81  /* prepended to continuation I2C transactions */
 
-#define MATRIX_ROWS  8
+#define MATRIX_ROWS    8
 #define I2C_TIMEOUT_MS 100
 
 /* ── State ───────────────────────────────────────────────────────────────── */
 
-static rgb_led_matrix_config_t s_cfg;
-static jettyd_driver_t s_driver;
+static rgb_led_matrix_config_t  s_cfg;
+static jettyd_driver_t          s_driver;
+static i2c_master_bus_handle_t  s_bus    = NULL;
+static i2c_master_dev_handle_t  s_dev    = NULL;
 
-static i2c_master_bus_handle_t s_bus  = NULL;
-static i2c_master_dev_handle_t s_dev  = NULL;
-
-static uint8_t  s_pattern[MATRIX_ROWS] = {0};
-static uint8_t  s_color_r = 0xFF;
-static uint8_t  s_color_g = 0xFF;
-static uint8_t  s_color_b = 0xFF;
-static bool     s_enabled = false;
-
-/* Current pattern/color as strings for read-back */
-static char s_pattern_str[20] = "all_off";
+static char s_pattern_str[20] = "";
 static char s_color_str[8]    = "FFFFFF";
+static bool s_enabled         = false;
 
-/* ── Named patterns ──────────────────────────────────────────────────────── */
+/* ── Named emoji patterns ────────────────────────────────────────────────── */
+/* Indices come from the Seeed library header (0-34). */
 
-typedef struct { const char *name; uint8_t rows[MATRIX_ROWS]; } named_pattern_t;
+typedef struct { const char *name; uint8_t index; } emoji_entry_t;
 
-static const named_pattern_t NAMED_PATTERNS[] = {
-    { "heart",      { 0x00, 0x6C, 0xFE, 0xFE, 0x7C, 0x38, 0x10, 0x00 } },
-    { "smiley",     { 0x3C, 0x42, 0xA5, 0x81, 0xA5, 0x99, 0x42, 0x3C } },
-    { "sad",        { 0x3C, 0x42, 0xA5, 0x81, 0x99, 0xA5, 0x42, 0x3C } },
-    { "check",      { 0x01, 0x03, 0x06, 0x8C, 0xD8, 0x70, 0x20, 0x00 } },
-    { "x",          { 0x81, 0x42, 0x24, 0x18, 0x18, 0x24, 0x42, 0x81 } },
-    { "arrow_up",   { 0x18, 0x3C, 0x7E, 0xFF, 0x18, 0x18, 0x18, 0x00 } },
-    { "arrow_down", { 0x00, 0x18, 0x18, 0x18, 0xFF, 0x7E, 0x3C, 0x18 } },
-    { "arrow_left", { 0x10, 0x30, 0x70, 0xFF, 0xFF, 0x70, 0x30, 0x10 } },
-    { "arrow_right",{ 0x08, 0x0C, 0x0E, 0xFF, 0xFF, 0x0E, 0x0C, 0x08 } },
-    { "all_on",     { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF } },
-    { "all_off",    { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 } },
-    { "border",     { 0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xFF } },
-    { "diamond",    { 0x18, 0x3C, 0x7E, 0xFF, 0xFF, 0x7E, 0x3C, 0x18 } },
-    { "exclaim",    { 0x18, 0x18, 0x18, 0x18, 0x00, 0x00, 0x18, 0x00 } },
-    { "question",   { 0x3C, 0x42, 0x02, 0x0C, 0x10, 0x00, 0x10, 0x00 } },
+static const emoji_entry_t EMOJI_TABLE[] = {
+    { "smile",        0  },
+    { "smiley",       0  },
+    { "laugh",        1  },
+    { "sad",          2  },
+    { "mad",          3  },
+    { "angry",        4  },
+    { "cry",          5  },
+    { "greedy",       6  },
+    { "cool",         7  },
+    { "shy",          8  },
+    { "awkward",      9  },
+    { "heart",        10 },
+    { "small_heart",  11 },
+    { "broken_heart", 12 },
+    { "waterdrop",    13 },
+    { "flame",        14 },
+    { "fire",         14 },
+    { "creeper",      15 },
+    { "sword",        17 },
+    { "house",        20 },
+    { "tree",         21 },
+    { "flower",       22 },
+    { "umbrella",     23 },
+    { "rain",         24 },
+    { "monster",      25 },
+    { "crab",         26 },
+    { "duck",         27 },
+    { "rabbit",       28 },
+    { "cat",          29 },
+    { "up",           30 },
+    { "arrow_up",     30 },
+    { "down",         31 },
+    { "arrow_down",   31 },
+    { "left",         32 },
+    { "arrow_left",   32 },
+    { "right",        33 },
+    { "arrow_right",  33 },
 };
-#define NAMED_PATTERN_COUNT (sizeof(NAMED_PATTERNS) / sizeof(NAMED_PATTERNS[0]))
+#define EMOJI_COUNT (sizeof(EMOJI_TABLE) / sizeof(EMOJI_TABLE[0]))
 
-/* ── I2C helpers ─────────────────────────────────────────────────────────── */
+/* ── Bitmap-only patterns (no emoji equivalent) ──────────────────────────── */
+/* Displayed via displayFrames with the nearest palette colour. */
 
-static esp_err_t write_reg(uint8_t reg, uint8_t val)
+typedef struct { const char *name; uint8_t rows[MATRIX_ROWS]; } bitmap_entry_t;
+
+static const bitmap_entry_t BITMAP_TABLE[] = {
+    { "check",    { 0x01, 0x03, 0x06, 0x8C, 0xD8, 0x70, 0x20, 0x00 } },
+    { "x",        { 0x81, 0x42, 0x24, 0x18, 0x18, 0x24, 0x42, 0x81 } },
+    { "all_on",   { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF } },
+    { "border",   { 0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xFF } },
+    { "diamond",  { 0x18, 0x3C, 0x7E, 0xFF, 0xFF, 0x7E, 0x3C, 0x18 } },
+    { "exclaim",  { 0x18, 0x18, 0x18, 0x18, 0x00, 0x00, 0x18, 0x00 } },
+    { "question", { 0x3C, 0x42, 0x02, 0x0C, 0x10, 0x00, 0x10, 0x00 } },
+};
+#define BITMAP_COUNT (sizeof(BITMAP_TABLE) / sizeof(BITMAP_TABLE[0]))
+
+/* ── Palette colour matching ─────────────────────────────────────────────── */
+/* The STM32F031 uses a fixed 8-bit palette; 0xFF = off. */
+
+static const struct { uint8_t c, r, g, b; } PALETTE[] = {
+    { 0x00, 255,   0,   0 }, /* red    */
+    { 0x12, 255, 140,   0 }, /* orange */
+    { 0x18, 255, 255,   0 }, /* yellow */
+    { 0x52,   0, 255,   0 }, /* green  */
+    { 0x7f,   0, 255, 255 }, /* cyan   */
+    { 0xaa,   0,   0, 255 }, /* blue   */
+    { 0xc3, 128,   0, 255 }, /* purple */
+    { 0xdc, 255,   0, 128 }, /* pink   */
+    { 0xfe, 255, 255, 255 }, /* white  */
+};
+#define PALETTE_COUNT (sizeof(PALETTE) / sizeof(PALETTE[0]))
+
+static uint8_t nearest_palette_color(uint8_t r, uint8_t g, uint8_t b)
 {
-    uint8_t buf[2] = { reg, val };
-    return i2c_master_transmit(s_dev, buf, 2, I2C_TIMEOUT_MS);
+    uint8_t best = PALETTE[0].c;
+    int32_t best_dist = INT32_MAX;
+    for (size_t i = 0; i < PALETTE_COUNT; i++) {
+        int32_t dr = (int32_t)r - PALETTE[i].r;
+        int32_t dg = (int32_t)g - PALETTE[i].g;
+        int32_t db = (int32_t)b - PALETTE[i].b;
+        int32_t dist = dr*dr + dg*dg + db*db;
+        if (dist < best_dist) { best_dist = dist; best = PALETTE[i].c; }
+    }
+    return best;
 }
 
-static esp_err_t write_reg_burst(uint8_t reg_start, const uint8_t *data, size_t len)
+/* ── I2C helper ──────────────────────────────────────────────────────────── */
+
+static esp_err_t i2c_send(const uint8_t *data, size_t len)
 {
-    /* Send reg + all data bytes in a single I2C transaction */
-    uint8_t buf[MATRIX_ROWS + 1];
-    buf[0] = reg_start;
-    memcpy(&buf[1], data, len);
-    return i2c_master_transmit(s_dev, buf, len + 1, I2C_TIMEOUT_MS);
+    return i2c_master_transmit(s_dev, data, len, I2C_TIMEOUT_MS);
 }
 
-static esp_err_t trigger_display(void)
+/* ── Display commands ────────────────────────────────────────────────────── */
+
+static esp_err_t cmd_display_emoji(uint8_t index)
 {
-    uint8_t buf[1] = { REG_DISPLAY_NOW };
-    return i2c_master_transmit(s_dev, buf, 1, I2C_TIMEOUT_MS);
+    uint8_t buf[5] = {
+        CMD_DISP_EMOJI,
+        index,
+        0x00, 0x00, /* duration (ignored when forever=1) */
+        0x01,       /* forever */
+    };
+    return i2c_send(buf, sizeof(buf));
 }
 
-/* ── Display helpers ─────────────────────────────────────────────────────── */
-
-static esp_err_t push_color(uint8_t r, uint8_t g, uint8_t b)
+static esp_err_t cmd_display_frames(const uint8_t bitmap[MATRIX_ROWS], uint8_t palette_color)
 {
-    esp_err_t err;
-    if ((err = write_reg(REG_COLOR_R, r)) != ESP_OK) return err;
-    if ((err = write_reg(REG_COLOR_G, g)) != ESP_OK) return err;
-    if ((err = write_reg(REG_COLOR_B, b)) != ESP_OK) return err;
-    return ESP_OK;
-}
+    /*
+     * 72-byte frame buffer layout:
+     *   [0]    CMD_DISP_CUSTOM (0x05)
+     *   [1..2] duration lo/hi (0 — ignored because forever=1)
+     *   [3]    forever (1)
+     *   [4]    frame_count (1)
+     *   [5]    frame_index (0)
+     *   [6..7] reserved
+     *   [8..71] 64 pixel bytes — row-major, MSB = leftmost pixel
+     *           on-pixel = palette_color, off-pixel = 0xFF
+     *
+     * Sent as three I2C transactions (matching Arduino library):
+     *   tx1: data[0..23]       (24 bytes)
+     *   tx2: 0x81 + data[24..47] (25 bytes)
+     *   tx3: 0x81 + data[48..71] (25 bytes)
+     */
+    uint8_t data[72] = {0};
+    data[0] = CMD_DISP_CUSTOM;
+    data[3] = 0x01; /* forever */
+    data[4] = 0x01; /* 1 frame */
 
-static esp_err_t push_pattern(const uint8_t rows[MATRIX_ROWS])
-{
-    return write_reg_burst(REG_ROW_BASE, rows, MATRIX_ROWS);
-}
-
-static esp_err_t display_now(void)
-{
-    esp_err_t err;
-    if ((err = push_color(s_color_r, s_color_g, s_color_b)) != ESP_OK) return err;
-    if ((err = push_pattern(s_pattern))                      != ESP_OK) return err;
-    if ((err = trigger_display())                             != ESP_OK) return err;
-    return ESP_OK;
-}
-
-/* ── Pattern parsing ─────────────────────────────────────────────────────── */
-
-static bool parse_named_pattern(const char *name, uint8_t out[MATRIX_ROWS])
-{
-    for (size_t i = 0; i < NAMED_PATTERN_COUNT; i++) {
-        if (strcmp(NAMED_PATTERNS[i].name, name) == 0) {
-            memcpy(out, NAMED_PATTERNS[i].rows, MATRIX_ROWS);
-            return true;
+    for (int row = 0; row < MATRIX_ROWS; row++) {
+        for (int col = 0; col < 8; col++) {
+            bool on = (bitmap[row] >> (7 - col)) & 1;
+            data[8 + row * 8 + col] = on ? palette_color : 0xFF;
         }
     }
-    return false;
+
+    esp_err_t err;
+    uint8_t cont[25];
+
+    err = i2c_send(data, 24);
+    if (err != ESP_OK) { ESP_LOGE(TAG, "frames tx1: %s", esp_err_to_name(err)); return err; }
+    vTaskDelay(pdMS_TO_TICKS(1));
+
+    cont[0] = CMD_CONTINUE_DATA;
+    memcpy(cont + 1, data + 24, 24);
+    err = i2c_send(cont, 25);
+    if (err != ESP_OK) { ESP_LOGE(TAG, "frames tx2: %s", esp_err_to_name(err)); return err; }
+    vTaskDelay(pdMS_TO_TICKS(1));
+
+    memcpy(cont + 1, data + 48, 24);
+    err = i2c_send(cont, 25);
+    if (err != ESP_OK) ESP_LOGE(TAG, "frames tx3: %s", esp_err_to_name(err));
+    return err;
 }
 
-static bool parse_hex_pattern(const char *hex, uint8_t out[MATRIX_ROWS])
+static esp_err_t cmd_display_color_block(uint8_t r, uint8_t g, uint8_t b)
 {
-    /* Expect exactly 16 hex chars = 8 bytes */
+    uint8_t buf[7] = {
+        CMD_DISP_COLOR_BLOCK,
+        r, g, b,
+        0x00, 0x00, /* duration (ignored) */
+        0x01,       /* forever */
+    };
+    return i2c_send(buf, sizeof(buf));
+}
+
+static esp_err_t cmd_display_off(void)
+{
+    uint8_t buf[1] = { CMD_DISP_OFF };
+    return i2c_send(buf, sizeof(buf));
+}
+
+/* ── Parsing helpers ─────────────────────────────────────────────────────── */
+
+static bool parse_color(const char *hex, uint8_t *r, uint8_t *g, uint8_t *b)
+{
+    if (strlen(hex) != 6) return false;
+    char buf[3]; char *end;
+    buf[0] = hex[0]; buf[1] = hex[1]; buf[2] = '\0';
+    *r = (uint8_t)strtol(buf, &end, 16); if (end != buf+2) return false;
+    buf[0] = hex[2]; buf[1] = hex[3];
+    *g = (uint8_t)strtol(buf, &end, 16); if (end != buf+2) return false;
+    buf[0] = hex[4]; buf[1] = hex[5];
+    *b = (uint8_t)strtol(buf, &end, 16); if (end != buf+2) return false;
+    return true;
+}
+
+static bool parse_hex_bitmap(const char *hex, uint8_t out[MATRIX_ROWS])
+{
     if (strlen(hex) != 16) return false;
     for (int i = 0; i < MATRIX_ROWS; i++) {
-        char byte_str[3] = { hex[i * 2], hex[i * 2 + 1], '\0' };
+        char byte_str[3] = { hex[i*2], hex[i*2+1], '\0' };
         char *end;
         long val = strtol(byte_str, &end, 16);
-        if (end != byte_str + 2) return false;
+        if (end != byte_str+2) return false;
         out[i] = (uint8_t)val;
     }
     return true;
 }
 
-static bool parse_color(const char *hex, uint8_t *r, uint8_t *g, uint8_t *b)
+/* ── Core display dispatch ───────────────────────────────────────────────── */
+
+static esp_err_t do_display(void)
 {
-    /* Expect exactly 6 hex chars e.g. FF0000 */
-    if (strlen(hex) != 6) return false;
-    char buf[3];
-    char *end;
-    buf[0] = hex[0]; buf[1] = hex[1]; buf[2] = '\0';
-    *r = (uint8_t)strtol(buf, &end, 16); if (end != buf + 2) return false;
-    buf[0] = hex[2]; buf[1] = hex[3];
-    *g = (uint8_t)strtol(buf, &end, 16); if (end != buf + 2) return false;
-    buf[0] = hex[4]; buf[1] = hex[5];
-    *b = (uint8_t)strtol(buf, &end, 16); if (end != buf + 2) return false;
-    return true;
+    uint8_t r = 0xFF, g = 0xFF, b = 0xFF;
+    parse_color(s_color_str, &r, &g, &b);
+
+    /* 1. Emoji table (named patterns with fixed built-in colors) */
+    for (size_t i = 0; i < EMOJI_COUNT; i++) {
+        if (strcmp(EMOJI_TABLE[i].name, s_pattern_str) == 0) {
+            ESP_LOGI(TAG, "emoji '%s' idx=%d", s_pattern_str, EMOJI_TABLE[i].index);
+            return cmd_display_emoji(EMOJI_TABLE[i].index);
+        }
+    }
+
+    /* 2. Bitmap table (custom shapes — respects colour param) */
+    for (size_t i = 0; i < BITMAP_COUNT; i++) {
+        if (strcmp(BITMAP_TABLE[i].name, s_pattern_str) == 0) {
+            uint8_t col = nearest_palette_color(r, g, b);
+            ESP_LOGI(TAG, "bitmap '%s' color=#%s palette=0x%02X", s_pattern_str, s_color_str, col);
+            return cmd_display_frames(BITMAP_TABLE[i].rows, col);
+        }
+    }
+
+    /* 3. 16-char hex bitmap string */
+    uint8_t bitmap[MATRIX_ROWS];
+    if (parse_hex_bitmap(s_pattern_str, bitmap)) {
+        uint8_t col = nearest_palette_color(r, g, b);
+        ESP_LOGI(TAG, "hex bitmap color=#%s palette=0x%02X", s_color_str, col);
+        return cmd_display_frames(bitmap, col);
+    }
+
+    /* 4. No pattern — solid colour block */
+    ESP_LOGI(TAG, "color block #%s", s_color_str);
+    return cmd_display_color_block(r, g, b);
 }
 
 /* ── Driver operations ───────────────────────────────────────────────────── */
@@ -176,18 +294,15 @@ static esp_err_t matrix_init(const void *config)
     if (s_cfg.i2c_addr == 0) s_cfg.i2c_addr = 0x65;
 
     i2c_master_bus_config_t bus_cfg = {
-        .i2c_port            = s_cfg.i2c_port,
-        .sda_io_num          = s_cfg.sda_pin,
-        .scl_io_num          = s_cfg.scl_pin,
-        .clk_source          = I2C_CLK_SRC_DEFAULT,
-        .glitch_ignore_cnt   = 7,
+        .i2c_port          = s_cfg.i2c_port,
+        .sda_io_num        = s_cfg.sda_pin,
+        .scl_io_num        = s_cfg.scl_pin,
+        .clk_source        = I2C_CLK_SRC_DEFAULT,
+        .glitch_ignore_cnt = 7,
         .flags.enable_internal_pullup = true,
     };
     esp_err_t err = i2c_new_master_bus(&bus_cfg, &s_bus);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "I2C bus init failed: %s", esp_err_to_name(err));
-        return err;
-    }
+    if (err != ESP_OK) { ESP_LOGE(TAG, "I2C bus: %s", esp_err_to_name(err)); return err; }
 
     i2c_device_config_t dev_cfg = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
@@ -195,13 +310,9 @@ static esp_err_t matrix_init(const void *config)
         .scl_speed_hz    = 100000,
     };
     err = i2c_master_bus_add_device(s_bus, &dev_cfg, &s_dev);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "I2C device add failed: %s", esp_err_to_name(err));
-        return err;
-    }
+    if (err != ESP_OK) { ESP_LOGE(TAG, "I2C dev: %s", esp_err_to_name(err)); return err; }
 
-    /* Start with display off, white colour */
-    write_reg(REG_DISPLAY_ENABLED, 0x00);
+    cmd_display_off();
     ESP_LOGI(TAG, "RGB LED Matrix init: sda=%d scl=%d addr=0x%02X",
              s_cfg.sda_pin, s_cfg.scl_pin, s_cfg.i2c_addr);
     return ESP_OK;
@@ -209,7 +320,7 @@ static esp_err_t matrix_init(const void *config)
 
 static esp_err_t matrix_deinit(void)
 {
-    write_reg(REG_DISPLAY_ENABLED, 0x00);
+    cmd_display_off();
     if (s_dev) { i2c_master_bus_rm_device(s_dev); s_dev = NULL; }
     if (s_bus) { i2c_del_master_bus(s_bus); s_bus = NULL; }
     return ESP_OK;
@@ -217,21 +328,16 @@ static esp_err_t matrix_deinit(void)
 
 static esp_err_t matrix_switch_on(uint32_t duration_ms)
 {
-    (void)duration_ms; /* Matrix has no auto-off; stays until switch_off or new pattern */
-    esp_err_t err = display_now();
-    if (err != ESP_OK) return err;
-    err = write_reg(REG_DISPLAY_ENABLED, 0x01);
+    (void)duration_ms;
+    esp_err_t err = do_display();
     if (err == ESP_OK) s_enabled = true;
     return err;
 }
 
 static esp_err_t matrix_switch_off(void)
 {
-    esp_err_t err = write_reg(REG_DISPLAY_ENABLED, 0x00);
-    if (err == ESP_OK) {
-        s_enabled = false;
-        strlcpy(s_pattern_str, "all_off", sizeof(s_pattern_str));
-    }
+    esp_err_t err = cmd_display_off();
+    if (err == ESP_OK) s_enabled = false;
     return err;
 }
 
@@ -260,47 +366,31 @@ static esp_err_t matrix_write(const char *capability, jettyd_value_t value)
     if (value.type != JETTYD_VAL_STRING) return ESP_ERR_INVALID_ARG;
 
     if (strcmp(capability, "pattern") == 0) {
-        uint8_t rows[MATRIX_ROWS];
-        bool ok = parse_named_pattern(value.str_val, rows)
-               || parse_hex_pattern(value.str_val, rows);
-        if (!ok) {
-            ESP_LOGW(TAG, "Unknown pattern: '%s'", value.str_val);
-            return ESP_ERR_INVALID_ARG;
-        }
-        memcpy(s_pattern, rows, MATRIX_ROWS);
         strlcpy(s_pattern_str, value.str_val, sizeof(s_pattern_str));
-        ESP_LOGI(TAG, "Pattern set: %s", s_pattern_str);
-        if (s_enabled) return display_now();
+        ESP_LOGI(TAG, "pattern: %s", s_pattern_str);
+        if (s_enabled) return do_display();
         return ESP_OK;
-
     } else if (strcmp(capability, "color") == 0) {
         uint8_t r, g, b;
         if (!parse_color(value.str_val, &r, &g, &b)) {
-            ESP_LOGW(TAG, "Invalid color: '%s' (want RRGGBB hex)", value.str_val);
+            ESP_LOGW(TAG, "invalid color: '%s'", value.str_val);
             return ESP_ERR_INVALID_ARG;
         }
-        s_color_r = r; s_color_g = g; s_color_b = b;
         strlcpy(s_color_str, value.str_val, sizeof(s_color_str));
-        ESP_LOGI(TAG, "Color set: #%s", s_color_str);
-        if (s_enabled) return display_now();
+        ESP_LOGI(TAG, "color: #%s", s_color_str);
+        if (s_enabled) return do_display();
         return ESP_OK;
     }
-
     return ESP_ERR_INVALID_ARG;
 }
 
 static esp_err_t matrix_self_test(void)
 {
-    /* Flash all LEDs white briefly */
-    uint8_t all_on[MATRIX_ROWS];
-    memset(all_on, 0xFF, MATRIX_ROWS);
-    push_color(0xFF, 0xFF, 0xFF);
-    push_pattern(all_on);
-    trigger_display();
-    write_reg(REG_DISPLAY_ENABLED, 0x01);
-    vTaskDelay(pdMS_TO_TICKS(200));
-    write_reg(REG_DISPLAY_ENABLED, 0x00);
-    return ESP_OK;
+    /* Show the heart emoji for 1 second then turn off */
+    uint8_t buf[5] = { CMD_DISP_EMOJI, 10, 0xE8, 0x03, 0x00 }; /* 1000ms, not forever */
+    i2c_send(buf, sizeof(buf));
+    vTaskDelay(pdMS_TO_TICKS(1100));
+    return cmd_display_off();
 }
 
 /* ── Registration ────────────────────────────────────────────────────────── */
