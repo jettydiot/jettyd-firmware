@@ -100,16 +100,33 @@ static esp_err_t pwm_deinit(void)
 
 static jettyd_value_t pwm_read(const char *capability)
 {
-    jettyd_value_t val = {
-        .type = JETTYD_VAL_FLOAT,
-        .float_val = s_duty_pct,
-        .valid = true,
-    };
+    jettyd_value_t val = {0};
+    if (strcmp(capability, "freq") == 0) {
+        val.type = JETTYD_VAL_INT;
+        val.int_val = (int32_t)s_cfg.freq_hz;
+        val.valid = true;
+    } else {
+        val.type = JETTYD_VAL_FLOAT;
+        val.float_val = s_duty_pct;
+        val.valid = true;
+    }
     return val;
 }
 
 static esp_err_t pwm_write(const char *capability, jettyd_value_t value)
 {
+    if (strcmp(capability, "freq") == 0) {
+        uint32_t new_freq = 0;
+        if (value.type == JETTYD_VAL_INT)        new_freq = (uint32_t)value.int_val;
+        else if (value.type == JETTYD_VAL_FLOAT) new_freq = (uint32_t)value.float_val;
+        else return ESP_ERR_INVALID_ARG;
+        if (new_freq < 10 || new_freq > 40000) return ESP_ERR_INVALID_ARG;
+        s_cfg.freq_hz = new_freq;
+        esp_err_t err = ledc_set_freq(PWM_LEDC_MODE, PWM_LEDC_TIMER, new_freq);
+        ESP_LOGI(TAG, "PWM freq set to %lu Hz (pin %d)", (unsigned long)new_freq, s_cfg.pin);
+        return err;
+    }
+
     float pct = 0.0f;
     if (value.type == JETTYD_VAL_FLOAT) {
         pct = value.float_val;
@@ -175,13 +192,20 @@ void pwm_output_register(const char *instance, const void *config)
     strncpy(s_driver.instance, instance, JETTYD_MAX_INSTANCE_NAME - 1);
     strlcpy(s_driver.driver_name, "pwm_output", sizeof(s_driver.driver_name));
 
-    s_driver.capability_count = 1;
+    s_driver.capability_count = 2;
     strlcpy(s_driver.capabilities[0].name, "duty", sizeof(s_driver.capabilities[0].name));
     s_driver.capabilities[0].type = JETTYD_CAP_WRITABLE;
     s_driver.capabilities[0].value_type = JETTYD_VAL_FLOAT;
     s_driver.capabilities[0].min_value = 0.0f;
     s_driver.capabilities[0].max_value = 100.0f;
     strlcpy(s_driver.capabilities[0].unit, "%", sizeof(s_driver.capabilities[0].unit));
+
+    strlcpy(s_driver.capabilities[1].name, "freq", sizeof(s_driver.capabilities[1].name));
+    s_driver.capabilities[1].type = JETTYD_CAP_WRITABLE;
+    s_driver.capabilities[1].value_type = JETTYD_VAL_INT;
+    s_driver.capabilities[1].min_value = 10.0f;
+    s_driver.capabilities[1].max_value = 40000.0f;
+    strlcpy(s_driver.capabilities[1].unit, "Hz", sizeof(s_driver.capabilities[1].unit));
 
     s_driver.init = pwm_init;
     s_driver.deinit = pwm_deinit;
