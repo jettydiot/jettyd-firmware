@@ -1,0 +1,38 @@
+name: rgb_led_matrix
+description: "Grove RGB LED Matrix 8x8 (STM32F031 I2C bridge + MY9221 driver)"
+category: actuator
+capabilities:
+  - name: pattern
+    type: writable
+    value_type: string
+    description: "Named pattern or 16-char hex bitmap (e.g. heart, 3C7EFFFFFFFF7E3C)"
+  - name: color
+    type: writable
+    value_type: string
+    description: "RGB hex color e.g. FF0000 (red), 00FF00 (green), 0000FF (blue)"
+
+config_schema:
+  sda_pin:
+    type: int
+    required: true
+    description: "GPIO pin for I2C SDA"
+  scl_pin:
+    type: int
+    required: true
+    description: "GPIO pin for I2C SCL"
+  i2c_port:
+    type: int
+    default: 0
+    description: "I2C peripheral number (0 or 1)"
+  i2c_addr:
+    type: int
+    default: 101
+    description: "I2C address (0x65 = 101)"
+
+compatible_targets:
+  - esp32s3
+  - esp32c3
+  - esp32c6
+
+esp_idf_components:
+  - driver
