@@ -137,6 +137,27 @@ static esp_err_t pwm_write(const char *capability, jettyd_value_t value)
     return ESP_OK;
 }
 
+static esp_err_t pwm_switch_on(uint32_t duration_ms)
+{
+    jettyd_value_t val = { .type = JETTYD_VAL_FLOAT, .float_val = 50.0f, .valid = true };
+    esp_err_t err = pwm_write("duty", val);
+
+    if (err == ESP_OK && duration_ms > 0 && s_auto_off_timer) {
+        uint32_t max_ms = s_cfg.max_on_duration * 1000;
+        uint32_t off_ms = (max_ms > 0 && duration_ms > max_ms) ? max_ms : duration_ms;
+        xTimerChangePeriod(s_auto_off_timer, pdMS_TO_TICKS(off_ms), 0);
+        xTimerStart(s_auto_off_timer, 0);
+    }
+
+    return err;
+}
+
+static esp_err_t pwm_switch_off(void)
+{
+    jettyd_value_t val = { .type = JETTYD_VAL_FLOAT, .float_val = 0.0f, .valid = true };
+    return pwm_write("duty", val);
+}
+
 static esp_err_t pwm_self_test(void)
 {
     float original = s_duty_pct;
@@ -166,6 +187,8 @@ void pwm_output_register(const char *instance, const void *config)
     s_driver.deinit = pwm_deinit;
     s_driver.read = pwm_read;
     s_driver.write = pwm_write;
+    s_driver.switch_on = pwm_switch_on;
+    s_driver.switch_off = pwm_switch_off;
     s_driver.self_test = pwm_self_test;
 
     JETTYD_REGISTER_DRIVER(&s_driver);
