@@ -138,7 +138,17 @@ static uint8_t nearest_palette_color(uint8_t r, uint8_t g, uint8_t b)
 
 static esp_err_t i2c_send(const uint8_t *data, size_t len)
 {
-    return i2c_master_transmit(s_dev, data, len, I2C_TIMEOUT_MS);
+    if (!s_dev) {
+        ESP_LOGE(TAG, "i2c_send: device handle is NULL (init failed?)");
+        return ESP_ERR_INVALID_STATE;
+    }
+    esp_err_t err = i2c_master_transmit(s_dev, data, len, I2C_TIMEOUT_MS);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "i2c_send cmd=0x%02X len=%u: %s", data[0], (unsigned)len, esp_err_to_name(err));
+    } else {
+        ESP_LOGI(TAG, "i2c_send cmd=0x%02X len=%u OK", data[0], (unsigned)len);
+    }
+    return err;
 }
 
 /* ── Display commands ────────────────────────────────────────────────────── */
@@ -312,6 +322,15 @@ static esp_err_t matrix_init(const void *config)
     err = i2c_master_bus_add_device(s_bus, &dev_cfg, &s_dev);
     if (err != ESP_OK) { ESP_LOGE(TAG, "I2C dev: %s", esp_err_to_name(err)); return err; }
 
+    /* Probe the device — confirms wiring + address before any display command */
+    esp_err_t probe = i2c_master_probe(s_bus, s_cfg.i2c_addr, I2C_TIMEOUT_MS);
+    if (probe != ESP_OK) {
+        ESP_LOGE(TAG, "I2C probe addr=0x%02X FAILED: %s — check wiring & address",
+                 s_cfg.i2c_addr, esp_err_to_name(probe));
+    } else {
+        ESP_LOGI(TAG, "I2C probe addr=0x%02X OK", s_cfg.i2c_addr);
+    }
+
     cmd_display_off();
     ESP_LOGI(TAG, "RGB LED Matrix init: sda=%d scl=%d addr=0x%02X",
              s_cfg.sda_pin, s_cfg.scl_pin, s_cfg.i2c_addr);
@@ -329,14 +348,18 @@ static esp_err_t matrix_deinit(void)
 static esp_err_t matrix_switch_on(uint32_t duration_ms)
 {
     (void)duration_ms;
+    ESP_LOGI(TAG, "switch_on: pattern='%s' color='%s'", s_pattern_str, s_color_str);
     esp_err_t err = do_display();
+    ESP_LOGI(TAG, "switch_on result: %s", esp_err_to_name(err));
     if (err == ESP_OK) s_enabled = true;
     return err;
 }
 
 static esp_err_t matrix_switch_off(void)
 {
+    ESP_LOGI(TAG, "switch_off called");
     esp_err_t err = cmd_display_off();
+    ESP_LOGI(TAG, "switch_off result: %s", esp_err_to_name(err));
     if (err == ESP_OK) s_enabled = false;
     return err;
 }
