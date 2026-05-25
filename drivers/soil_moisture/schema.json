@@ -1,0 +1,15 @@
+{
+  "driver": "soil_moisture",
+  "description": "Capacitive or resistive soil moisture sensor via ADC, 0–100% output",
+  "type": "sensor",
+  "telemetry": {
+    "{instance}.moisture": { "type": "number", "unit": "%", "min": 0, "max": 100 }
+  },
+  "commands": {},
+  "config": {
+    "pin": { "type": "integer", "required": true },
+    "type": { "type": "string", "default": "capacitive", "enum": ["capacitive", "resistive"] },
+    "dry_value": { "type": "integer", "default": 4095 },
+    "wet_value": { "type": "integer", "default": 1200 }
+  }
+}
