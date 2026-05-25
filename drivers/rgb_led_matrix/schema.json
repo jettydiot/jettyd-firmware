@@ -1,0 +1,33 @@
+{
+  "driver": "rgb_led_matrix",
+  "description": "Grove 8x8 RGB LED Matrix — named patterns, emoji, hex bitmaps, color control",
+  "type": "actuator",
+  "telemetry": {
+    "{instance}.pattern": { "type": "string" },
+    "{instance}.color": { "type": "string", "description": "RGB hex e.g. FF0000" }
+  },
+  "commands": {
+    "matrix.set_pattern": {
+      "description": "Display a pattern on the matrix",
+      "params": {
+        "pattern": {
+          "type": "string",
+          "required": true,
+          "description": "Named pattern (smile, heart, check, x, all_on, border, diamond, exclaim, question, up, down, left, right, ...) or 16-char hex bitmap"
+        },
+        "color": {
+          "type": "string",
+          "description": "RGB hex color e.g. FF0000. Ignored for emoji patterns."
+        }
+      }
+    },
+    "matrix.on": { "description": "Display last set pattern", "params": {} },
+    "matrix.off": { "description": "Turn matrix off", "params": {} }
+  },
+  "config": {
+    "sda_pin": { "type": "integer", "required": true },
+    "scl_pin": { "type": "integer", "required": true },
+    "i2c_port": { "type": "integer", "default": 0 },
+    "i2c_addr": { "type": "string", "default": "0x65" }
+  }
+}
