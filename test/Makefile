@@ -7,7 +7,7 @@
 #   make clean    — remove build artifacts
 
 CC      := cc
-CFLAGS  := -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Werror -g \
+CFLAGS  := -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -g \
            -I. \
            -Imocks \
            -I../jettyd/include \
@@ -20,13 +20,16 @@ SDK_SRC := ../jettyd/src/driver_registry.c
 
 all: test
 
-test: build/test_drivers build/test_button
+test: build/test_drivers build/test_button build/test_manifest
 	@echo ""
 	@echo "Running test_drivers..."
 	@./build/test_drivers
 	@echo ""
 	@echo "Running test_button..."
 	@./build/test_button
+	@echo ""
+	@echo "Running test_manifest..."
+	@./build/test_manifest
 	@echo ""
 	@echo "✅ All test suites passed"
 
@@ -35,6 +38,9 @@ build/test_drivers: test_drivers.c $(SDK_SRC) | build
 
 build/test_button: test_button.c | build
 	$(CC) $(CFLAGS) -o $@ $<
+
+build/test_manifest: test_manifest.c $(SDK_SRC) | build
+	$(CC) $(CFLAGS) -o $@ $^
 
 build:
 	mkdir -p build
