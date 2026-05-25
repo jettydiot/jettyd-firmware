@@ -1,0 +1,13 @@
+{
+  "driver": "hcsr04",
+  "description": "HC-SR04 ultrasonic distance sensor, 2–400 cm range",
+  "type": "sensor",
+  "telemetry": {
+    "{instance}.distance": { "type": "number", "unit": "cm", "min": 2, "max": 400 }
+  },
+  "commands": {},
+  "config": {
+    "trigger_pin": { "type": "integer", "required": true },
+    "echo_pin": { "type": "integer", "required": true }
+  }
+}
