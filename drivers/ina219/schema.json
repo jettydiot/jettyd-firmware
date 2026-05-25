@@ -1,0 +1,18 @@
+{
+  "driver": "ina219",
+  "description": "INA219 I2C voltage, current, and power monitor",
+  "type": "sensor",
+  "telemetry": {
+    "{instance}.voltage": { "type": "number", "unit": "V", "min": 0, "max": 26 },
+    "{instance}.current": { "type": "number", "unit": "A", "min": -3.2, "max": 3.2 },
+    "{instance}.power": { "type": "number", "unit": "W", "min": 0, "max": 83.2 }
+  },
+  "commands": {},
+  "config": {
+    "i2c_port": { "type": "integer", "required": true },
+    "sda_pin": { "type": "integer", "required": true },
+    "scl_pin": { "type": "integer", "required": true },
+    "i2c_addr": { "type": "string", "default": "0x40" },
+    "shunt_resistance_mohm": { "type": "integer", "default": 100 }
+  }
+}
