@@ -10,6 +10,7 @@ idf_component_register(
         "src/telemetry.c"
         "src/vm.c"
         "src/driver_registry.c"
+        "src/manifest.c"
     INCLUDE_DIRS
         "include"
     REQUIRES

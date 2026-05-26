@@ -4,6 +4,7 @@
  */
 
 #include "jettyd_mqtt.h"
+#include "jettyd_manifest.h"
 #include "jettyd_provision.h"
 #include "esp_log.h"
 #include <stdbool.h>
@@ -64,6 +65,10 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
 
         /* Flush buffered messages */
         jettyd_mqtt_flush_buffer();
+
+        /* Re-publish driver capability manifest on every (re)connect so that
+         * a broker restart cannot permanently lose the retained message (FLU-113). */
+        jettyd_publish_manifest();
         break;
     }
 

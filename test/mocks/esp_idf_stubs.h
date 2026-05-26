@@ -185,6 +185,7 @@ static inline esp_err_t ledc_channel_config(const ledc_channel_config_t *c) { (v
 static inline esp_err_t ledc_set_duty(ledc_mode_t m, ledc_channel_t c, uint32_t d) { (void)m; (void)c; (void)d; return ESP_OK; }
 static inline esp_err_t ledc_update_duty(ledc_mode_t m, ledc_channel_t c)  { (void)m; (void)c; return ESP_OK; }
 static inline esp_err_t ledc_stop(ledc_mode_t m, ledc_channel_t c, uint32_t l) { (void)m; (void)c; (void)l; return ESP_OK; }
+static inline void esp_idf_stubs_dummy(void) { (void)0; }
 
 /* ── IRAM_ATTR (no-op on host) ──────────────────────────────────────────── */
 #define IRAM_ATTR
