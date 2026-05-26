@@ -1,0 +1,13 @@
+{
+  "driver": "ds18b20",
+  "description": "Dallas 1-Wire temperature sensor, ±0.5°C accuracy at 12-bit",
+  "type": "sensor",
+  "telemetry": {
+    "{instance}.temperature": { "type": "number", "unit": "°C", "min": -55, "max": 125 }
+  },
+  "commands": {},
+  "config": {
+    "pin": { "type": "integer", "required": true },
+    "resolution": { "type": "integer", "default": 12, "enum": [9, 10, 11, 12] }
+  }
+}

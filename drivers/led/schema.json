@@ -1,0 +1,24 @@
+{
+  "driver": "led",
+  "description": "GPIO LED with on/off/toggle/blink commands",
+  "type": "actuator",
+  "telemetry": {
+    "{instance}.state": { "type": "boolean" }
+  },
+  "commands": {
+    "led.on": { "description": "Turn LED on", "params": {} },
+    "led.off": { "description": "Turn LED off", "params": {} },
+    "led.toggle": { "description": "Toggle LED state", "params": {} },
+    "led.blink": {
+      "description": "Blink LED N times",
+      "params": {
+        "interval_ms": { "type": "integer", "default": 500, "description": "Blink interval in ms" },
+        "count": { "type": "integer", "default": 3, "description": "Number of blinks" }
+      }
+    }
+  },
+  "config": {
+    "pin": { "type": "integer", "required": true },
+    "active_high": { "type": "boolean", "default": true }
+  }
+}

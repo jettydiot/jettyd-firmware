@@ -1,0 +1,19 @@
+{
+  "driver": "button",
+  "description": "GPIO button with press, long-press, and double-press detection",
+  "type": "sensor",
+  "telemetry": {
+    "{instance}.press": { "type": "boolean" },
+    "{instance}.press_count": { "type": "number", "unit": "count" },
+    "{instance}.long_press": { "type": "boolean" },
+    "{instance}.double_press": { "type": "boolean" }
+  },
+  "commands": {},
+  "config": {
+    "pin": { "type": "integer", "required": true },
+    "active_low": { "type": "boolean", "default": true },
+    "debounce_ms": { "type": "integer", "default": 50 },
+    "long_press_ms": { "type": "integer", "default": 500 },
+    "double_press_ms": { "type": "integer", "default": 300 }
+  }
+}

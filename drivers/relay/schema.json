@@ -1,0 +1,21 @@
+{
+  "driver": "relay",
+  "description": "GPIO relay actuator with safety auto-off timer",
+  "type": "actuator",
+  "telemetry": {
+    "{instance}.state": { "type": "boolean" }
+  },
+  "commands": {
+    "relay.on": {
+      "description": "Energize relay, with optional auto-off",
+      "params": { "duration_ms": { "type": "integer", "description": "Auto-off after ms" } }
+    },
+    "relay.off": { "description": "De-energize relay", "params": {} }
+  },
+  "config": {
+    "pin": { "type": "integer", "required": true },
+    "active_high": { "type": "boolean", "default": true },
+    "default_state": { "type": "string", "default": "off", "enum": ["on", "off"] },
+    "max_on_duration": { "type": "integer", "default": 1800, "description": "Auto-off seconds; 0=disabled" }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "driver": "bme280",
+  "description": "Bosch BME280 I2C temperature, humidity, and pressure sensor",
+  "type": "sensor",
+  "telemetry": {
+    "{instance}.temperature": { "type": "number", "unit": "°C", "min": -40, "max": 85 },
+    "{instance}.humidity": { "type": "number", "unit": "%", "min": 0, "max": 100 },
+    "{instance}.pressure": { "type": "number", "unit": "hPa", "min": 300, "max": 1100 }
+  },
+  "commands": {},
+  "config": {
+    "i2c_port": { "type": "integer", "required": true },
+    "sda_pin": { "type": "integer", "required": true },
+    "scl_pin": { "type": "integer", "required": true },
+    "i2c_addr": { "type": "string", "default": "0x76" },
+    "oversampling": { "type": "integer", "default": 1, "min": 1, "max": 5 }
+  }
+}

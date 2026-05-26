@@ -1,0 +1,30 @@
+{
+  "driver": "pwm_output",
+  "description": "ESP32 LEDC PWM output — dimmers, buzzers, fan control",
+  "type": "actuator",
+  "telemetry": {
+    "{instance}.duty": { "type": "number", "unit": "%", "min": 0, "max": 100 },
+    "{instance}.freq": { "type": "number", "unit": "Hz", "min": 10, "max": 40000 }
+  },
+  "commands": {
+    "pwm.set_duty": {
+      "description": "Set PWM duty cycle",
+      "params": { "value": { "type": "number", "min": 0, "max": 100, "required": true } }
+    },
+    "pwm.set_freq": {
+      "description": "Set PWM frequency",
+      "params": { "value": { "type": "number", "min": 10, "max": 40000, "required": true } }
+    },
+    "pwm.on": {
+      "description": "Set duty to 50%, optional auto-off",
+      "params": { "duration_ms": { "type": "integer", "description": "Auto-off after ms" } }
+    },
+    "pwm.off": { "description": "Set duty to 0%", "params": {} }
+  },
+  "config": {
+    "pin": { "type": "integer", "required": true },
+    "ledc_channel": { "type": "integer", "default": 0, "min": 0, "max": 7 },
+    "freq_hz": { "type": "integer", "default": 1000 },
+    "max_on_duration": { "type": "integer", "default": 3600, "description": "Auto-off seconds; 0=disabled" }
+  }
+}

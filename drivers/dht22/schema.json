@@ -1,0 +1,13 @@
+{
+  "driver": "dht22",
+  "description": "DHT22 single-wire temperature and humidity sensor (2s min read interval)",
+  "type": "sensor",
+  "telemetry": {
+    "{instance}.temperature": { "type": "number", "unit": "°C", "min": -40, "max": 80 },
+    "{instance}.humidity": { "type": "number", "unit": "%", "min": 0, "max": 100 }
+  },
+  "commands": {},
+  "config": {
+    "pin": { "type": "integer", "required": true }
+  }
+}
