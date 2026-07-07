@@ -23,6 +23,7 @@
 #include "button.h"
 #include "jettyd_driver.h"
 #include "jettyd_telemetry.h"
+#include <stdio.h>
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -238,6 +239,18 @@ static jettyd_value_t button_read(const char *metric)
     return v;
 }
 
+/* ── MCP handlers ────────────────────────────────────────────────────────── */
+
+static esp_err_t button_mcp_get_state(const char *params_json, char *out, size_t out_len)
+{
+    (void)params_json;
+    jettyd_value_t press = button_read("press");
+    jettyd_value_t count = button_read("press_count");
+    snprintf(out, out_len, "{\"pressed\":%s,\"press_count\":%d}",
+             press.bool_val ? "true" : "false", (int)count.float_val);
+    return ESP_OK;
+}
+
 /* ── Registration ────────────────────────────────────────────────────────── */
 
 void button_register(const char *instance, const void *config)
@@ -266,6 +279,14 @@ void button_register(const char *instance, const void *config)
     s_driver.capability_count = 4;
     s_driver.init = button_init;
     s_driver.read = button_read;
+
+    static const char *schema_none = "{\"type\":\"object\",\"properties\":{}}";
+
+    strlcpy(s_driver.mcp_tools[0].name, "button_get_state", sizeof(s_driver.mcp_tools[0].name));
+    s_driver.mcp_tools[0].description = "Get the button press state and count";
+    s_driver.mcp_tools[0].input_schema_json = schema_none;
+    s_driver.mcp_tools[0].handler = button_mcp_get_state;
+    s_driver.mcp_tool_count = 1;
 
     jettyd_driver_registry_add(&s_driver);
     button_init(config);

@@ -16,6 +16,7 @@
 #include "freertos/task.h"
 #include "rom/ets_sys.h"
 #include <string.h>
+#include <stdio.h>
 
 static const char *TAG = "drv_dht22";
 
@@ -173,6 +174,17 @@ static esp_err_t dht22_self_test(void)
     return dht22_read_raw(data);
 }
 
+static esp_err_t dht22_mcp_read(const char *params_json, char *out, size_t out_len)
+{
+    (void)params_json;
+    jettyd_value_t temp = dht22_read("temperature");
+    jettyd_value_t hum  = dht22_read("humidity");
+    snprintf(out, out_len, "{\"temperature\":%.2f,\"humidity\":%.2f}",
+             temp.valid ? temp.float_val : 0.0f,
+             hum.valid  ? hum.float_val  : 0.0f);
+    return (temp.valid || hum.valid) ? ESP_OK : ESP_FAIL;
+}
+
 void dht22_register(const char *instance, const void *config)
 {
     dht22_init(config);
@@ -200,6 +212,14 @@ void dht22_register(const char *instance, const void *config)
     s_driver.init = dht22_init;
     s_driver.read = dht22_read;
     s_driver.self_test = dht22_self_test;
+
+    static const char *schema_none = "{\"type\":\"object\",\"properties\":{}}";
+
+    strlcpy(s_driver.mcp_tools[0].name, "dht22_read", sizeof(s_driver.mcp_tools[0].name));
+    s_driver.mcp_tools[0].description = "Read temperature and humidity";
+    s_driver.mcp_tools[0].input_schema_json = schema_none;
+    s_driver.mcp_tools[0].handler = dht22_mcp_read;
+    s_driver.mcp_tool_count = 1;
 
     JETTYD_REGISTER_DRIVER(&s_driver);
 }

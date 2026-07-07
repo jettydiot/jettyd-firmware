@@ -16,6 +16,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <string.h>
+#include <stdio.h>
 
 static const char *TAG = "drv_ds18b20";
 
@@ -217,6 +218,14 @@ static esp_err_t ds18b20_self_test(void)
     return ow_reset(pin) ? ESP_OK : ESP_ERR_NOT_FOUND;
 }
 
+static esp_err_t ds18b20_mcp_read(const char *params_json, char *out, size_t out_len)
+{
+    (void)params_json;
+    jettyd_value_t temp = ds18b20_read("temperature");
+    snprintf(out, out_len, "{\"temperature\":%.2f}", temp.valid ? temp.float_val : 0.0f);
+    return temp.valid ? ESP_OK : ESP_FAIL;
+}
+
 void ds18b20_register(const char *instance, const void *config)
 {
     ds18b20_init(config);
@@ -236,6 +245,14 @@ void ds18b20_register(const char *instance, const void *config)
     s_driver.init = ds18b20_init;
     s_driver.read = ds18b20_read;
     s_driver.self_test = ds18b20_self_test;
+
+    static const char *schema_none = "{\"type\":\"object\",\"properties\":{}}";
+
+    strlcpy(s_driver.mcp_tools[0].name, "ds18b20_read", sizeof(s_driver.mcp_tools[0].name));
+    s_driver.mcp_tools[0].description = "Read temperature from DS18B20 probe";
+    s_driver.mcp_tools[0].input_schema_json = schema_none;
+    s_driver.mcp_tools[0].handler = ds18b20_mcp_read;
+    s_driver.mcp_tool_count = 1;
 
     JETTYD_REGISTER_DRIVER(&s_driver);
 }

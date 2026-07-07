@@ -15,21 +15,23 @@ Open-source C SDK for ESP-IDF that connects ESP32 devices to [jettyd](https://je
 - **OTA** — over-the-air firmware updates
 - **JettyScript VM** — local rule engine (if/then logic without cloud round-trips)
 - **Driver framework** — pluggable sensor/actuator drivers with a standard interface
+- **MCP tool dispatch** — AI agents invoke driver tools directly over MQTT (see [docs/mcp-tools.md](docs/mcp-tools.md))
 
 ## Drivers included
 
-| Driver | Type | Metrics / Actions |
-|--------|------|-------------------|
-| `dht22` | Sensor | temperature, humidity |
-| `bme280` | Sensor | temperature, humidity, pressure |
-| `ds18b20` | Sensor | temperature |
-| `soil_moisture` | Sensor | moisture (0–100%) |
-| `hcsr04` | Sensor | distance_cm |
-| `ina219` | Sensor | voltage, current, power |
-| `led` | Actuator | on, off, blink |
-| `relay` | Actuator | on, off |
-| `button` | Input | press, long_press, double_press |
-| `pwm_output` | Actuator | duty cycle (0–100%) |
+| Driver | Type | Metrics / Actions | MCP tools |
+|--------|------|-------------------|-----------|
+| `dht22` | Sensor | temperature, humidity | `dht22_read` |
+| `bme280` | Sensor | temperature, humidity, pressure | `bme280_read` |
+| `ds18b20` | Sensor | temperature | `ds18b20_read_temperature` |
+| `soil_moisture` | Sensor | moisture (0–100%) | `soil_read_moisture` |
+| `hcsr04` | Sensor | distance_cm | `hcsr04_measure_distance` |
+| `ina219` | Sensor | voltage, current, power | `ina219_read_power` |
+| `led` | Actuator | on, off, blink | `led_turn_on`, `led_turn_off`, `led_blink` |
+| `relay` | Actuator | on, off | `relay_turn_on`, `relay_turn_off` |
+| `button` | Input | press, long_press, double_press | `button_get_state` |
+| `pwm_output` | Actuator | duty cycle (0–100%), frequency | `pwm_set_duty`, `pwm_set_freq` |
+| `rgb_led_matrix` | Actuator | pattern display | `matrix_show`, `matrix_clear` |
 
 ## System metrics
 

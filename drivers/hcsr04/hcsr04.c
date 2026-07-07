@@ -15,6 +15,7 @@
 #include "esp_timer.h"
 #include "rom/ets_sys.h"
 #include <string.h>
+#include <stdio.h>
 
 static const char *TAG = "drv_hcsr04";
 
@@ -115,6 +116,14 @@ static esp_err_t hcsr04_self_test(void)
     return ESP_OK;
 }
 
+static esp_err_t hcsr04_mcp_measure(const char *params_json, char *out, size_t out_len)
+{
+    (void)params_json;
+    jettyd_value_t dist = hcsr04_read("distance");
+    snprintf(out, out_len, "{\"distance_cm\":%.2f}", dist.valid ? dist.float_val : 0.0f);
+    return dist.valid ? ESP_OK : ESP_FAIL;
+}
+
 void hcsr04_register(const char *instance, const void *config)
 {
     hcsr04_init(config);
@@ -135,6 +144,15 @@ void hcsr04_register(const char *instance, const void *config)
     s_driver.deinit = hcsr04_deinit;
     s_driver.read = hcsr04_read;
     s_driver.self_test = hcsr04_self_test;
+
+    static const char *schema_none = "{\"type\":\"object\",\"properties\":{}}";
+
+    strlcpy(s_driver.mcp_tools[0].name, "hcsr04_measure_distance",
+            sizeof(s_driver.mcp_tools[0].name));
+    s_driver.mcp_tools[0].description = "Measure ultrasonic distance in cm";
+    s_driver.mcp_tools[0].input_schema_json = schema_none;
+    s_driver.mcp_tools[0].handler = hcsr04_mcp_measure;
+    s_driver.mcp_tool_count = 1;
 
     JETTYD_REGISTER_DRIVER(&s_driver);
 }

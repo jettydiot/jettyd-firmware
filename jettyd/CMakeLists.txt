@@ -11,6 +11,7 @@ idf_component_register(
         "src/vm.c"
         "src/driver_registry.c"
         "src/manifest.c"
+        "src/mcp.c"
     INCLUDE_DIRS
         "include"
     REQUIRES

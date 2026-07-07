@@ -14,6 +14,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <string.h>
+#include <stdio.h>
 
 static const char *TAG = "drv_bme280";
 
@@ -272,6 +273,20 @@ static esp_err_t bme280_self_test(void)
     return (chip_id == BME280_CHIP_ID_VALUE) ? ESP_OK : ESP_ERR_NOT_FOUND;
 }
 
+static esp_err_t bme280_mcp_read(const char *params_json, char *out, size_t out_len)
+{
+    (void)params_json;
+    jettyd_value_t temp = bme280_read("temperature");
+    jettyd_value_t hum  = bme280_read("humidity");
+    jettyd_value_t pres = bme280_read("pressure");
+    snprintf(out, out_len,
+             "{\"temperature\":%.2f,\"humidity\":%.2f,\"pressure\":%.2f}",
+             temp.valid ? temp.float_val : 0.0f,
+             hum.valid  ? hum.float_val  : 0.0f,
+             pres.valid ? pres.float_val : 0.0f);
+    return (temp.valid || hum.valid || pres.valid) ? ESP_OK : ESP_FAIL;
+}
+
 void bme280_register(const char *instance, const void *config)
 {
     bme280_init(config);
@@ -307,6 +322,14 @@ void bme280_register(const char *instance, const void *config)
     s_driver.deinit = bme280_deinit;
     s_driver.read = bme280_read;
     s_driver.self_test = bme280_self_test;
+
+    static const char *schema_none = "{\"type\":\"object\",\"properties\":{}}";
+
+    strlcpy(s_driver.mcp_tools[0].name, "bme280_read", sizeof(s_driver.mcp_tools[0].name));
+    s_driver.mcp_tools[0].description = "Read temperature, humidity, and pressure";
+    s_driver.mcp_tools[0].input_schema_json = schema_none;
+    s_driver.mcp_tools[0].handler = bme280_mcp_read;
+    s_driver.mcp_tool_count = 1;
 
     JETTYD_REGISTER_DRIVER(&s_driver);
 }
