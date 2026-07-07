@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdio.h>
 
 static const char *TAG = "drv_matrix";
 
@@ -418,6 +419,49 @@ static esp_err_t matrix_self_test(void)
 
 /* ── Registration ────────────────────────────────────────────────────────── */
 
+static esp_err_t matrix_mcp_show(const char *params_json, char *out, size_t out_len)
+{
+    char pattern[32] = "solid";
+    char color[16]   = "white";
+
+    if (params_json) {
+        const char *p = strstr(params_json, "\"pattern\":\"");
+        if (p) {
+            p += 11;
+            size_t i = 0;
+            while (*p && *p != '"' && i < sizeof(pattern) - 1) pattern[i++] = *p++;
+            pattern[i] = '\0';
+        }
+        p = strstr(params_json, "\"color\":\"");
+        if (p) {
+            p += 9;
+            size_t i = 0;
+            while (*p && *p != '"' && i < sizeof(color) - 1) color[i++] = *p++;
+            color[i] = '\0';
+        }
+    }
+
+    jettyd_value_t pv = {.type = JETTYD_VAL_STRING, .valid = true};
+    strlcpy(pv.str_val, pattern, sizeof(pv.str_val));
+    matrix_write("pattern", pv);
+
+    jettyd_value_t cv = {.type = JETTYD_VAL_STRING, .valid = true};
+    strlcpy(cv.str_val, color, sizeof(cv.str_val));
+    matrix_write("color", cv);
+
+    esp_err_t err = matrix_switch_on(0);
+    if (err == ESP_OK) snprintf(out, out_len, "{\"state\":true}");
+    return err;
+}
+
+static esp_err_t matrix_mcp_clear(const char *params_json, char *out, size_t out_len)
+{
+    (void)params_json;
+    esp_err_t err = matrix_switch_off();
+    if (err == ESP_OK) snprintf(out, out_len, "{\"state\":false}");
+    return err;
+}
+
 void rgb_led_matrix_register(const char *instance, const void *config)
 {
     matrix_init(config);
@@ -444,6 +488,21 @@ void rgb_led_matrix_register(const char *instance, const void *config)
     s_driver.switch_off = matrix_switch_off;
     s_driver.get_state  = matrix_get_state;
     s_driver.self_test  = matrix_self_test;
+
+    static const char *schema_show = "{\"type\":\"object\",\"properties\":{\"pattern\":{\"type\":\"string\"},\"color\":{\"type\":\"string\"}}}";
+    static const char *schema_none = "{\"type\":\"object\",\"properties\":{}}";
+
+    strlcpy(s_driver.mcp_tools[0].name, "matrix_show", sizeof(s_driver.mcp_tools[0].name));
+    s_driver.mcp_tools[0].description = "Display a pattern on the LED matrix";
+    s_driver.mcp_tools[0].input_schema_json = schema_show;
+    s_driver.mcp_tools[0].handler = matrix_mcp_show;
+
+    strlcpy(s_driver.mcp_tools[1].name, "matrix_clear", sizeof(s_driver.mcp_tools[1].name));
+    s_driver.mcp_tools[1].description = "Turn off the LED matrix";
+    s_driver.mcp_tools[1].input_schema_json = schema_none;
+    s_driver.mcp_tools[1].handler = matrix_mcp_clear;
+
+    s_driver.mcp_tool_count = 2;
 
     JETTYD_REGISTER_DRIVER(&s_driver);
 }

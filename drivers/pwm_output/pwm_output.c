@@ -10,6 +10,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/timers.h"
 #include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 static const char *TAG = "drv_pwm";
 
@@ -184,6 +186,32 @@ static esp_err_t pwm_self_test(void)
     return ESP_OK;
 }
 
+static esp_err_t pwm_mcp_set_duty(const char *params_json, char *out, size_t out_len)
+{
+    float duty = 0.0f;
+    if (params_json) {
+        const char *p = strstr(params_json, "\"duty\":");
+        if (p) duty = strtof(p + 7, NULL);
+    }
+    jettyd_value_t v = {.type = JETTYD_VAL_FLOAT, .float_val = duty, .valid = true};
+    esp_err_t err = pwm_write("duty", v);
+    if (err == ESP_OK) snprintf(out, out_len, "{\"duty\":%.1f}", duty);
+    return err;
+}
+
+static esp_err_t pwm_mcp_set_freq(const char *params_json, char *out, size_t out_len)
+{
+    int freq = 1000;
+    if (params_json) {
+        const char *p = strstr(params_json, "\"freq\":");
+        if (p) freq = atoi(p + 7);
+    }
+    jettyd_value_t v = {.type = JETTYD_VAL_INT, .int_val = freq, .valid = true};
+    esp_err_t err = pwm_write("freq", v);
+    if (err == ESP_OK) snprintf(out, out_len, "{\"freq\":%d}", freq);
+    return err;
+}
+
 void pwm_output_register(const char *instance, const void *config)
 {
     pwm_init(config);
@@ -214,6 +242,21 @@ void pwm_output_register(const char *instance, const void *config)
     s_driver.switch_on = pwm_switch_on;
     s_driver.switch_off = pwm_switch_off;
     s_driver.self_test = pwm_self_test;
+
+    static const char *schema_duty = "{\"type\":\"object\",\"properties\":{\"duty\":{\"type\":\"number\"}}}";
+    static const char *schema_freq = "{\"type\":\"object\",\"properties\":{\"freq\":{\"type\":\"number\"}}}";
+
+    strlcpy(s_driver.mcp_tools[0].name, "pwm_set_duty", sizeof(s_driver.mcp_tools[0].name));
+    s_driver.mcp_tools[0].description = "Set PWM duty cycle (0-100%)";
+    s_driver.mcp_tools[0].input_schema_json = schema_duty;
+    s_driver.mcp_tools[0].handler = pwm_mcp_set_duty;
+
+    strlcpy(s_driver.mcp_tools[1].name, "pwm_set_freq", sizeof(s_driver.mcp_tools[1].name));
+    s_driver.mcp_tools[1].description = "Set PWM frequency in Hz";
+    s_driver.mcp_tools[1].input_schema_json = schema_freq;
+    s_driver.mcp_tools[1].handler = pwm_mcp_set_freq;
+
+    s_driver.mcp_tool_count = 2;
 
     JETTYD_REGISTER_DRIVER(&s_driver);
 }

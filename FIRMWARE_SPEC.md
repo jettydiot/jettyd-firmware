@@ -442,6 +442,77 @@ Implement these drivers for v1, in priority order:
 
 ---
 
+## 4.5 MCP tool dispatch (FLU-137)
+
+Every driver may expose one or more **MCP tools** — named operations that AI
+agents can discover and invoke over MQTT. The core runtime aggregates all
+registered tools and publishes a `tools/list` manifest on every MQTT connect.
+
+### Data types
+
+```c
+// jettyd/include/jettyd_driver.h
+
+#define JETTYD_MAX_MCP_TOOLS 8
+
+typedef struct {
+    char name[32];                  /* unique tool name, e.g. "relay_turn_on" */
+    const char *description;        /* flash string — human-readable for LLM */
+    const char *input_schema_json;  /* flash string — JSON Schema for params  */
+    esp_err_t (*handler)(const char *params_json, char *out_buf, size_t out_buf_len);
+} jettyd_mcp_tool_t;
+```
+
+`mcp_tools[JETTYD_MAX_MCP_TOOLS]` and `mcp_tool_count` are appended to
+`jettyd_driver_t`. Drivers that do not expose MCP tools leave `mcp_tool_count`
+at zero (set by `memset(&s_driver, 0, …)`).
+
+### Registering tools
+
+Populate `mcp_tools` and `mcp_tool_count` inside `*_register()`:
+
+```c
+static const char *schema_on =
+    "{\"type\":\"object\",\"properties\":{\"duration_s\":{\"type\":\"number\"}}}";
+
+strlcpy(s_driver.mcp_tools[0].name, "relay_turn_on", sizeof(s_driver.mcp_tools[0].name));
+s_driver.mcp_tools[0].description       = "Turn relay on";
+s_driver.mcp_tools[0].input_schema_json = schema_on;
+s_driver.mcp_tools[0].handler           = relay_mcp_turn_on;
+s_driver.mcp_tool_count = 1;
+```
+
+- `description` and `input_schema_json` must be `const char *` pointing to
+  flash-resident string literals. They are NOT copied — the pointer is stored.
+- Handlers receive `params_json` as a null-terminated string (may be `NULL`
+  if the caller omitted `params`). Use `strstr()` to extract fields — no heap.
+- Write the result as JSON into `out_buf` (up to `out_buf_len` bytes).
+- Return `ESP_OK` on success; any other value → `"status":"error"` in the reply.
+
+### MQTT protocol
+
+| Topic suffix | Direction | QoS | Retain |
+|---|---|---|---|
+| `tools/list` | device → platform | 1 | yes |
+| `mcp/call` | platform → device | 1 | no |
+| `mcp/result` | device → platform | 1 | no |
+
+`mcp/call` payload: `{"id":"…","tool":"relay_turn_on","params":{…}}`
+`mcp/result` payload: `{"id":"…","status":"ok","result":{…}}` or `{"id":"…","status":"error","error":"…"}`
+
+### Public API (`jettyd_mcp.h`)
+
+```c
+esp_err_t jettyd_mcp_init(void);                     /* called by jettyd_start() */
+esp_err_t jettyd_publish_mcp_tools(void);            /* called on MQTT connect   */
+esp_err_t jettyd_mcp_serialize_tools_list(char *buf, size_t buf_len);
+esp_err_t jettyd_mcp_handle_call(const char *payload, int payload_len);
+```
+
+See [docs/mcp-tools.md](docs/mcp-tools.md) for the full protocol reference and tool catalogue.
+
+---
+
 ## 5. Core runtime (Layer 2)
 
 ### Boot sequence

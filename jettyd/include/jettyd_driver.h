@@ -18,6 +18,7 @@
 #define JETTYD_MAX_DRIVERS          16
 #define JETTYD_MAX_CAPABILITIES     8
 #define JETTYD_MAX_INSTANCE_NAME    16
+#define JETTYD_MAX_MCP_TOOLS        8
 
 typedef enum {
     JETTYD_CAP_READABLE,       /**< Can be read (sensor value) */
@@ -51,6 +52,20 @@ typedef struct {
     bool valid;                         /**< false if read failed */
 } jettyd_value_t;
 
+/**
+ * @brief MCP tool descriptor registered by a driver at boot.
+ *
+ * The description and input_schema_json pointers must point to
+ * string literals or other storage with program lifetime (e.g. flash).
+ */
+typedef struct {
+    char name[32];                  /**< Unique tool name, e.g. "relay_turn_on" */
+    const char *description;        /**< Human-readable description (flash string) */
+    const char *input_schema_json;  /**< JSON Schema for inputs (flash string) */
+    /** Handler: receives params JSON object string, writes result JSON into out_buf. */
+    esp_err_t (*handler)(const char *params_json, char *out_buf, size_t out_buf_len);
+} jettyd_mcp_tool_t;
+
 typedef struct {
     /* Identity */
     char instance[JETTYD_MAX_INSTANCE_NAME];  /**< e.g., "soil", "valve" */
@@ -83,6 +98,11 @@ typedef struct {
      * @return ESP_OK on success, ESP_ERR_NOT_SUPPORTED if action unknown
      */
     esp_err_t (*command)(const char *action, const char *params_json);
+
+    /* MCP tool descriptors — populated by drivers at registration time.
+     * Drivers that expose no MCP tools leave these zero-initialized (default). */
+    jettyd_mcp_tool_t mcp_tools[JETTYD_MAX_MCP_TOOLS];
+    uint8_t mcp_tool_count;
 } jettyd_driver_t;
 
 /** Registration macro — called in each driver's register function */

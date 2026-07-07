@@ -8,6 +8,7 @@
 #include "esp_adc/adc_oneshot.h"
 #include "esp_log.h"
 #include <string.h>
+#include <stdio.h>
 
 static const char *TAG = "drv_soil";
 
@@ -107,6 +108,14 @@ static esp_err_t soil_self_test(void)
     return adc_oneshot_read(s_adc_handle, s_channel, &raw);
 }
 
+static esp_err_t soil_mcp_read_moisture(const char *params_json, char *out, size_t out_len)
+{
+    (void)params_json;
+    jettyd_value_t m = soil_read("moisture");
+    snprintf(out, out_len, "{\"moisture\":%.1f}", m.valid ? m.float_val : 0.0f);
+    return m.valid ? ESP_OK : ESP_FAIL;
+}
+
 void soil_moisture_register(const char *instance, const void *config)
 {
     soil_init(config);
@@ -127,6 +136,15 @@ void soil_moisture_register(const char *instance, const void *config)
     s_driver.deinit = soil_deinit;
     s_driver.read = soil_read;
     s_driver.self_test = soil_self_test;
+
+    static const char *schema_none = "{\"type\":\"object\",\"properties\":{}}";
+
+    strlcpy(s_driver.mcp_tools[0].name, "soil_read_moisture",
+            sizeof(s_driver.mcp_tools[0].name));
+    s_driver.mcp_tools[0].description = "Read soil moisture percentage";
+    s_driver.mcp_tools[0].input_schema_json = schema_none;
+    s_driver.mcp_tools[0].handler = soil_mcp_read_moisture;
+    s_driver.mcp_tool_count = 1;
 
     JETTYD_REGISTER_DRIVER(&s_driver);
 }

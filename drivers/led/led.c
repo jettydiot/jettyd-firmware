@@ -20,6 +20,8 @@
 #include "freertos/timers.h"
 #include <string.h>
 #include <stdbool.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 static const char *TAG = "drv_led";
 
@@ -125,6 +127,39 @@ static esp_err_t led_command(const char *action, const char *params_json)
     return ESP_ERR_NOT_SUPPORTED;
 }
 
+static esp_err_t led_mcp_turn_on(const char *params_json, char *out, size_t out_len)
+{
+    (void)params_json;
+    esp_err_t err = led_switch_on(0);
+    if (err == ESP_OK) snprintf(out, out_len, "{\"state\":true}");
+    return err;
+}
+
+static esp_err_t led_mcp_turn_off(const char *params_json, char *out, size_t out_len)
+{
+    (void)params_json;
+    esp_err_t err = led_switch_off();
+    if (err == ESP_OK) snprintf(out, out_len, "{\"state\":false}");
+    return err;
+}
+
+static esp_err_t led_mcp_blink(const char *params_json, char *out, size_t out_len)
+{
+    int interval_ms = 500;
+    int count = 3;
+    if (params_json) {
+        const char *p = strstr(params_json, "\"interval_ms\":");
+        if (p) interval_ms = atoi(p + 14);
+        p = strstr(params_json, "\"count\":");
+        if (p) count = atoi(p + 8);
+    }
+    char params_buf[64];
+    snprintf(params_buf, sizeof(params_buf), "{interval_ms: %d, count: %d}", interval_ms, count);
+    esp_err_t err = led_command("led.blink", params_buf);
+    if (err == ESP_OK) snprintf(out, out_len, "{\"blinking\":true}");
+    return err;
+}
+
 void led_register(const char *instance, const void *config)
 {
     memset(&s_driver, 0, sizeof(s_driver));
@@ -142,6 +177,26 @@ void led_register(const char *instance, const void *config)
     s_driver.switch_on  = led_switch_on;
     s_driver.switch_off = led_switch_off;
     s_driver.command    = led_command;
+
+    static const char *schema_none = "{\"type\":\"object\",\"properties\":{}}";
+    static const char *schema_blink = "{\"type\":\"object\",\"properties\":{\"interval_ms\":{\"type\":\"number\"},\"count\":{\"type\":\"number\"}}}";
+
+    strlcpy(s_driver.mcp_tools[0].name, "led_turn_on", sizeof(s_driver.mcp_tools[0].name));
+    s_driver.mcp_tools[0].description = "Turn the LED on";
+    s_driver.mcp_tools[0].input_schema_json = schema_none;
+    s_driver.mcp_tools[0].handler = led_mcp_turn_on;
+
+    strlcpy(s_driver.mcp_tools[1].name, "led_turn_off", sizeof(s_driver.mcp_tools[1].name));
+    s_driver.mcp_tools[1].description = "Turn the LED off";
+    s_driver.mcp_tools[1].input_schema_json = schema_none;
+    s_driver.mcp_tools[1].handler = led_mcp_turn_off;
+
+    strlcpy(s_driver.mcp_tools[2].name, "led_blink", sizeof(s_driver.mcp_tools[2].name));
+    s_driver.mcp_tools[2].description = "Blink the LED";
+    s_driver.mcp_tools[2].input_schema_json = schema_blink;
+    s_driver.mcp_tools[2].handler = led_mcp_blink;
+
+    s_driver.mcp_tool_count = 3;
 
     jettyd_driver_registry_add(&s_driver);
 

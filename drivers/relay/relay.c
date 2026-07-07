@@ -8,6 +8,7 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include <stdbool.h>
+#include <stdlib.h>
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/timers.h"
@@ -135,6 +136,26 @@ static esp_err_t relay_self_test(void)
     return ESP_OK;
 }
 
+static esp_err_t relay_mcp_turn_on(const char *params_json, char *out, size_t out_len)
+{
+    uint32_t duration_ms = 0;
+    if (params_json) {
+        const char *p = strstr(params_json, "\"duration\":");
+        if (p) duration_ms = (uint32_t)(atoi(p + 11) * 1000);
+    }
+    esp_err_t err = relay_switch_on(duration_ms);
+    if (err == ESP_OK) snprintf(out, out_len, "{\"state\":true}");
+    return err;
+}
+
+static esp_err_t relay_mcp_turn_off(const char *params_json, char *out, size_t out_len)
+{
+    (void)params_json;
+    esp_err_t err = relay_switch_off();
+    if (err == ESP_OK) snprintf(out, out_len, "{\"state\":false}");
+    return err;
+}
+
 void relay_register(const char *instance, const void *config)
 {
     relay_init(config);
@@ -157,6 +178,21 @@ void relay_register(const char *instance, const void *config)
     s_driver.switch_off = relay_switch_off;
     s_driver.get_state = relay_get_state;
     s_driver.self_test = relay_self_test;
+
+    static const char *schema_on = "{\"type\":\"object\",\"properties\":{\"duration\":{\"type\":\"number\"}}}";
+    static const char *schema_off = "{\"type\":\"object\",\"properties\":{}}";
+
+    strlcpy(s_driver.mcp_tools[0].name, "relay_turn_on", sizeof(s_driver.mcp_tools[0].name));
+    s_driver.mcp_tools[0].description = "Turn the relay on (optional duration in seconds)";
+    s_driver.mcp_tools[0].input_schema_json = schema_on;
+    s_driver.mcp_tools[0].handler = relay_mcp_turn_on;
+
+    strlcpy(s_driver.mcp_tools[1].name, "relay_turn_off", sizeof(s_driver.mcp_tools[1].name));
+    s_driver.mcp_tools[1].description = "Turn the relay off";
+    s_driver.mcp_tools[1].input_schema_json = schema_off;
+    s_driver.mcp_tools[1].handler = relay_mcp_turn_off;
+
+    s_driver.mcp_tool_count = 2;
 
     JETTYD_REGISTER_DRIVER(&s_driver);
 }

@@ -20,7 +20,7 @@ SDK_SRC := ../jettyd/src/driver_registry.c
 
 all: test
 
-test: build/test_drivers build/test_button build/test_manifest
+test: build/test_drivers build/test_button build/test_manifest build/test_mcp_tools
 	@echo ""
 	@echo "Running test_drivers..."
 	@./build/test_drivers
@@ -31,6 +31,9 @@ test: build/test_drivers build/test_button build/test_manifest
 	@echo "Running test_manifest..."
 	@./build/test_manifest
 	@echo ""
+	@echo "Running test_mcp_tools..."
+	@./build/test_mcp_tools
+	@echo ""
 	@echo "✅ All test suites passed"
 
 build/test_drivers: test_drivers.c $(SDK_SRC) | build
@@ -40,6 +43,9 @@ build/test_button: test_button.c | build
 	$(CC) $(CFLAGS) -o $@ $<
 
 build/test_manifest: test_manifest.c $(SDK_SRC) | build
+	$(CC) $(CFLAGS) -o $@ $^
+
+build/test_mcp_tools: test_mcp_tools.c $(SDK_SRC) | build
 	$(CC) $(CFLAGS) -o $@ $^
 
 build:

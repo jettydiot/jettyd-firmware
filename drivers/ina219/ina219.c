@@ -13,6 +13,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <string.h>
+#include <stdio.h>
 
 static const char *TAG = "drv_ina219";
 
@@ -138,6 +139,20 @@ static esp_err_t ina219_self_test(void)
     return (config_val != 0) ? ESP_OK : ESP_ERR_NOT_FOUND;
 }
 
+static esp_err_t ina219_mcp_read(const char *params_json, char *out, size_t out_len)
+{
+    (void)params_json;
+    jettyd_value_t volt = ina219_read("voltage");
+    jettyd_value_t curr = ina219_read("current");
+    jettyd_value_t pwr  = ina219_read("power");
+    snprintf(out, out_len,
+             "{\"voltage\":%.3f,\"current\":%.3f,\"power\":%.3f}",
+             volt.valid ? volt.float_val : 0.0f,
+             curr.valid ? curr.float_val : 0.0f,
+             pwr.valid  ? pwr.float_val  : 0.0f);
+    return (volt.valid || curr.valid || pwr.valid) ? ESP_OK : ESP_FAIL;
+}
+
 void ina219_register(const char *instance, const void *config)
 {
     ina219_init(config);
@@ -173,6 +188,14 @@ void ina219_register(const char *instance, const void *config)
     s_driver.deinit = ina219_deinit;
     s_driver.read = ina219_read;
     s_driver.self_test = ina219_self_test;
+
+    static const char *schema_none = "{\"type\":\"object\",\"properties\":{}}";
+
+    strlcpy(s_driver.mcp_tools[0].name, "ina219_read_power", sizeof(s_driver.mcp_tools[0].name));
+    s_driver.mcp_tools[0].description = "Read voltage, current, and power";
+    s_driver.mcp_tools[0].input_schema_json = schema_none;
+    s_driver.mcp_tools[0].handler = ina219_mcp_read;
+    s_driver.mcp_tool_count = 1;
 
     JETTYD_REGISTER_DRIVER(&s_driver);
 }
