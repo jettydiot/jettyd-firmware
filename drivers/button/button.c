@@ -246,8 +246,8 @@ static esp_err_t button_mcp_get_state(const char *params_json, char *out, size_t
     (void)params_json;
     jettyd_value_t press = button_read("press");
     jettyd_value_t count = button_read("press_count");
-    snprintf(out, out_len, "{\"pressed\":%s,\"press_count\":%d}",
-             press.bool_val ? "true" : "false", (int)count.float_val);
+    snprintf(out, out_len, "{\"pressed\":%s,\"press_count\":%" PRIu32 "}",
+             press.bool_val ? "true" : "false", (uint32_t)count.float_val);
     return ESP_OK;
 }
 
