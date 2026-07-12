@@ -1,0 +1,50 @@
+{
+  "driver": "camera",
+  "description": "ESP32-S3 OV2640 camera — JPEG capture and upload via media grant flow",
+  "type": "sensor",
+  "telemetry": {
+    "{instance}.upload_errors": {
+      "type": "integer",
+      "description": "Cumulative count of failed media uploads (grant timeout or PUT error)"
+    }
+  },
+  "commands": {
+    "camera_capture": {
+      "description": "Trigger an immediate JPEG capture and upload (MCP tool)",
+      "params": {}
+    }
+  },
+  "config": {
+    "sensor": {
+      "type": "string",
+      "enum": ["ov2640"],
+      "required": true,
+      "description": "Camera sensor model"
+    },
+    "frame_size": {
+      "type": "string",
+      "enum": ["qvga", "vga", "svga", "xga", "uxga"],
+      "default": "svga",
+      "description": "JPEG output resolution"
+    },
+    "jpeg_quality": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 63,
+      "default": 12,
+      "description": "JPEG quality 0–63 (0 = best quality, 63 = smallest file)"
+    },
+    "capture_interval_sec": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "Automatic capture interval; 0 = disabled"
+    },
+    "grant_timeout_sec": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 30,
+      "description": "Seconds to wait for media/grant before failing"
+    }
+  }
+}

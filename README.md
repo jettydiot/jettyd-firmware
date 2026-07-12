@@ -32,6 +32,7 @@ Open-source C SDK for ESP-IDF that connects ESP32 devices to [jettyd](https://je
 | `button` | Input | press, long_press, double_press | `button_get_state` |
 | `pwm_output` | Actuator | duty cycle (0–100%), frequency | `pwm_set_duty`, `pwm_set_freq` |
 | `rgb_led_matrix` | Actuator | pattern display | `matrix_show`, `matrix_clear` |
+| `camera` | Sensor | upload_errors | `camera_capture` |
 
 ## System metrics
 

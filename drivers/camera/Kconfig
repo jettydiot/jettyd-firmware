@@ -1,0 +1,14 @@
+menu "Camera Driver"
+
+config JETTYD_CAMERA_SUPPORTED
+    bool "Enable camera driver (OV2640)"
+    default y if IDF_TARGET_ESP32S3
+    default n
+    depends on IDF_TARGET_ESP32S3
+    help
+        Compile the full OV2640 camera implementation.
+        On non-camera targets (esp32c3, esp32c6) this is automatically
+        disabled and camera_register() compiles to a no-op stub so all
+        CI matrix legs remain green.
+
+endmenu
