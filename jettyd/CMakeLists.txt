@@ -1,3 +1,9 @@
+if(CONFIG_SOC_WIFI_SUPPORTED)
+    set(WIFI_COMPONENT_DEPS esp_wifi)
+else()
+    set(WIFI_COMPONENT_DEPS "")
+endif()
+
 idf_component_register(
     SRCS
         "src/jettyd.c"
@@ -16,7 +22,7 @@ idf_component_register(
         "include"
     REQUIRES
         nvs_flash
-        esp_wifi
+        ${WIFI_COMPONENT_DEPS}
         esp_event
         esp_netif
         mqtt
