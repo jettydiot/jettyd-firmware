@@ -19,9 +19,10 @@
 /* ── Pull in stubs and esp_camera mock early so camera_fb_t is known ── */
 
 #include "mocks/esp_idf_stubs.h"
-#include "mocks/esp_camera.h"   /* defines camera_fb_t, esp_cam_hw_config_t */
+#include "mocks/esp_camera.h"   /* defines camera_fb_t, camera_config_t (real HW struct) */
 #include "mocks/esp_psram.h"
 #include "mocks/esp_http_client.h"
+#include "mocks/freertos/queue.h"
 #include "mocks/mbedtls/sha256.h"
 #include "jettyd_driver.h"
 
@@ -33,6 +34,8 @@ static camera_fb_t g_test_fb_instance;
 camera_fb_t *g_test_fb        = NULL;
 bool         g_camera_init_ok = true;
 int          g_fb_return_count = 0;
+int          g_camera_init_frame_size  = -1;
+int          g_camera_init_fb_location = -1;
 
 bool   g_psram_available     = true;
 
@@ -123,7 +126,9 @@ int       jettyd_shadow_serialize(char *b, size_t n)            { (void)b;(void)
 
 /* ── Include unit under test ────────────────────────────────────────── */
 
-#define JETTYD_CAMERA_SUPPORTED 1
+#ifndef CONFIG_JETTYD_CAMERA_SUPPORTED
+#define CONFIG_JETTYD_CAMERA_SUPPORTED 1
+#endif
 #include "../drivers/camera/camera.c"
 
 /* ── Provision stubs (needed by driver_registry.c via JETTYD_REGISTER_DRIVER) ── */
@@ -166,6 +171,8 @@ static void camera_test_reset(void)
     g_test_fb          = NULL;
     g_camera_init_ok   = true;
     g_fb_return_count  = 0;
+    g_camera_init_frame_size  = -1;
+    g_camera_init_fb_location = -1;
     g_psram_available  = true;
 
     /* HTTP mock */
@@ -174,6 +181,11 @@ static void camera_test_reset(void)
     g_http_open_ok       = true;
     memset(g_http_last_url, 0, sizeof(g_http_last_url));
 
+    /* Fresh upload queue for each test (the dedicated upload task is a no-op
+     * on the host stub, so tests drain the queue synchronously via
+     * pump_upload_queue()). */
+    s_upload_queue = xQueueCreate(4, sizeof(cam_upload_job_t));
+
     /* Set up a default driver config */
     s_cfg.sensor               = CAMERA_SENSOR_OV2640;
     s_cfg.frame_size           = CAMERA_FRAME_SVGA;
@@ -181,6 +193,16 @@ static void camera_test_reset(void)
     s_cfg.capture_interval_sec = 0;
     s_cfg.grant_timeout_sec    = 30;
     strlcpy(s_instance, "cam", sizeof(s_instance));
+}
+
+/* Drain the upload queue synchronously, running each job through the same
+ * camera_run_upload() the dedicated upload task uses on-device. */
+static void pump_upload_queue(void)
+{
+    cam_upload_job_t job;
+    while (xQueueReceive(s_upload_queue, &job, 0) == pdTRUE) {
+        camera_run_upload(&job);
+    }
 }
 
 static void init_test_fb(void)
@@ -224,7 +246,7 @@ static void init_test_fb(void)
  * ══════════════════════════════════════════════════════════════════════ */
 
 TEST(config_rejects_unknown_sensor) {
-    camera_config_t cfg = {
+    camera_driver_config_t cfg = {
         .sensor               = CAMERA_SENSOR_UNKNOWN,
         .frame_size           = CAMERA_FRAME_SVGA,
         .jpeg_quality         = 12,
@@ -236,7 +258,7 @@ TEST(config_rejects_unknown_sensor) {
 }
 
 TEST(config_accepts_ov2640) {
-    camera_config_t cfg = {
+    camera_driver_config_t cfg = {
         .sensor               = CAMERA_SENSOR_OV2640,
         .frame_size           = CAMERA_FRAME_SVGA,
         .jpeg_quality         = 10,
@@ -248,7 +270,7 @@ TEST(config_accepts_ov2640) {
 }
 
 TEST(config_clamps_jpeg_quality_to_63) {
-    camera_config_t cfg = {
+    camera_driver_config_t cfg = {
         .sensor               = CAMERA_SENSOR_OV2640,
         .frame_size           = CAMERA_FRAME_VGA,
         .jpeg_quality         = 200,
@@ -261,7 +283,7 @@ TEST(config_clamps_jpeg_quality_to_63) {
 }
 
 TEST(config_quality_at_63_not_clamped) {
-    camera_config_t cfg = {
+    camera_driver_config_t cfg = {
         .sensor               = CAMERA_SENSOR_OV2640,
         .frame_size           = CAMERA_FRAME_VGA,
         .jpeg_quality         = 63,
@@ -273,7 +295,7 @@ TEST(config_quality_at_63_not_clamped) {
 }
 
 TEST(config_fills_default_grant_timeout) {
-    camera_config_t cfg = {
+    camera_driver_config_t cfg = {
         .sensor               = CAMERA_SENSOR_OV2640,
         .frame_size           = CAMERA_FRAME_SVGA,
         .jpeg_quality         = 12,
@@ -326,6 +348,8 @@ TEST(grant_triggers_upload_and_publishes_complete) {
     const char *grant = "{\"url\":\"https://upload.example.com/put?sig=abc\"}";
     camera_on_grant_received("jettyd/tenant/devkey/media/grant",
                               grant, (int)strlen(grant));
+    /* Grant only hands off; the upload task publishes media/complete. */
+    pump_upload_queue();
 
     ASSERT_TRUE(s_publish_called);
     ASSERT_STR_CONTAINS(s_published_topic, "media/complete");
@@ -341,6 +365,7 @@ TEST(grant_releases_framebuffer_on_success) {
 
     const char *grant = "{\"url\":\"https://upload.example.com/put?sig=abc\"}";
     camera_on_grant_received("grant", grant, (int)strlen(grant));
+    pump_upload_queue();
 
     ASSERT_EQ(g_fb_return_count, 1);
     ASSERT_TRUE(s_fb == NULL);
@@ -354,6 +379,7 @@ TEST(grant_upload_streams_full_framebuffer) {
 
     const char *grant = "{\"url\":\"https://s3.example.com/upload\"}";
     camera_on_grant_received("grant", grant, (int)strlen(grant));
+    pump_upload_queue();
 
     /* All 512 bytes of the fake framebuffer should have been written */
     ASSERT_EQ(g_http_bytes_written, sizeof(g_test_fb_data));
@@ -395,6 +421,7 @@ TEST(put_failure_increments_error_counter) {
     s_shadow_called = false;
     const char *grant = "{\"url\":\"https://upload.example.com/put\"}";
     camera_on_grant_received("grant", grant, (int)strlen(grant));
+    pump_upload_queue();
 
     ASSERT_EQ(g_fb_return_count, 1);
     ASSERT_EQ(s_upload_state, CAM_STATE_IDLE);
@@ -410,6 +437,7 @@ TEST(put_failure_does_not_publish_complete) {
     s_publish_called = false;
     const char *grant = "{\"url\":\"https://upload.example.com/put\"}";
     camera_on_grant_received("grant", grant, (int)strlen(grant));
+    pump_upload_queue();
 
     ASSERT_TRUE(!s_publish_called || !strstr(s_published_topic, "complete"));
 }
@@ -436,6 +464,79 @@ TEST(idle_state_ignores_grant) {
 
     ASSERT_EQ(s_publish_count, count_before);
     ASSERT_EQ(s_upload_state, CAM_STATE_IDLE);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ * Group B2: Grant/timeout race (use-after-free regression, FLU-157 review)
+ * ══════════════════════════════════════════════════════════════════════ */
+
+/* A grant that arrives AFTER the timeout callback has already fired must be
+ * ignored — it must not release the framebuffer a second time (UAF) nor
+ * enqueue a stale upload. */
+TEST(late_grant_after_timeout_does_not_double_release) {
+    init_test_fb();
+    camera_trigger_capture();
+    ASSERT_EQ(s_upload_state, CAM_STATE_AWAIT_GRANT);
+
+    /* Timeout fires first: releases fb once, returns to IDLE. */
+    camera_grant_timeout_cb(NULL);
+    ASSERT_EQ(s_upload_state, CAM_STATE_IDLE);
+    ASSERT_TRUE(s_fb == NULL);
+    ASSERT_EQ(g_fb_return_count, 1);
+    uint32_t errors_after_timeout = s_upload_errors;
+
+    /* Late grant arrives — state is no longer AWAIT_GRANT, so it is a no-op. */
+    const char *grant = "{\"url\":\"https://upload.example.com/put\"}";
+    camera_on_grant_received("grant", grant, (int)strlen(grant));
+    pump_upload_queue();   /* nothing should have been queued */
+
+    ASSERT_EQ(g_fb_return_count, 1);                 /* NOT 2 — no double free */
+    ASSERT_EQ(s_upload_state, CAM_STATE_IDLE);
+    ASSERT_EQ(s_upload_errors, errors_after_timeout); /* late grant added no error */
+}
+
+/* Conversely: once a grant has handed off to the upload task (UPLOADING), a
+ * stale timeout callback must NOT touch the framebuffer the task is streaming. */
+TEST(timeout_after_grant_handoff_is_noop) {
+    init_test_fb();
+    camera_trigger_capture();
+
+    const char *grant = "{\"url\":\"https://upload.example.com/put\"}";
+    camera_on_grant_received("grant", grant, (int)strlen(grant));
+
+    /* Handed off, not yet uploaded: state UPLOADING, fb still owned. */
+    ASSERT_EQ(s_upload_state, CAM_STATE_UPLOADING);
+    ASSERT_TRUE(s_fb != NULL);
+
+    /* Stale timeout callback fires mid-flight — must not release the fb. */
+    camera_grant_timeout_cb(NULL);
+    ASSERT_EQ(g_fb_return_count, 0);
+    ASSERT_EQ(s_upload_state, CAM_STATE_UPLOADING);
+
+    /* Upload task then runs and releases the fb exactly once. */
+    pump_upload_queue();
+    ASSERT_EQ(g_fb_return_count, 1);
+    ASSERT_EQ(s_upload_state, CAM_STATE_IDLE);
+}
+
+/* The grant callback must return quickly: it enqueues rather than uploading
+ * inline, so no media/complete is published until the upload task drains it. */
+TEST(grant_hands_off_without_blocking_publish) {
+    init_test_fb();
+    camera_trigger_capture();
+
+    s_publish_called = false;
+    memset(s_published_topic, 0, sizeof(s_published_topic));
+    const char *grant = "{\"url\":\"https://upload.example.com/put\"}";
+    camera_on_grant_received("grant", grant, (int)strlen(grant));
+
+    /* Before the upload task runs: no media/complete yet, fb still held. */
+    ASSERT_TRUE(!s_publish_called);
+    ASSERT_EQ(s_upload_state, CAM_STATE_UPLOADING);
+    ASSERT_EQ(g_http_bytes_written, 0u);
+
+    pump_upload_queue();
+    ASSERT_STR_CONTAINS(s_published_topic, "media/complete");
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -500,7 +601,7 @@ TEST(psram_absent_init_returns_error) {
 
 TEST(register_without_psram_does_not_crash) {
     g_psram_available = false;
-    camera_config_t cfg = {
+    camera_driver_config_t cfg = {
         .sensor               = CAMERA_SENSOR_OV2640,
         .frame_size           = CAMERA_FRAME_SVGA,
         .jpeg_quality         = 12,
@@ -534,6 +635,37 @@ TEST(mcp_capture_publishes_request) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
+ * Group F: HW frame-size mapping (real esp32-camera framesize_t)
+ *
+ * The driver enum (QVGA=0..UXGA=4) is NOT numerically aligned with the real
+ * framesize_t (QVGA=5, VGA=8, SVGA=9, XGA=10, UXGA=13). These tests fail if
+ * anyone reintroduces a bare (int) cast instead of the mapping table.
+ * ══════════════════════════════════════════════════════════════════════ */
+
+TEST(hw_init_maps_svga_to_real_framesize) {
+    g_psram_available = true;
+    s_cfg.frame_size  = CAMERA_FRAME_SVGA;
+    esp_err_t err = camera_hw_init();
+    ASSERT_EQ(err, ESP_OK);
+    ASSERT_EQ(g_camera_init_frame_size, FRAMESIZE_SVGA);   /* 9, not 2 */
+    ASSERT_EQ(g_camera_init_fb_location, CAMERA_FB_IN_PSRAM);
+}
+
+TEST(hw_init_maps_qvga_to_real_framesize) {
+    g_psram_available = true;
+    s_cfg.frame_size  = CAMERA_FRAME_QVGA;
+    camera_hw_init();
+    ASSERT_EQ(g_camera_init_frame_size, FRAMESIZE_QVGA);   /* 5, not 0 */
+}
+
+TEST(hw_init_maps_uxga_to_real_framesize) {
+    g_psram_available = true;
+    s_cfg.frame_size  = CAMERA_FRAME_UXGA;
+    camera_hw_init();
+    ASSERT_EQ(g_camera_init_frame_size, FRAMESIZE_UXGA);   /* 13, not 4 */
+}
+
+/* ══════════════════════════════════════════════════════════════════════
  * Main
  * ══════════════════════════════════════════════════════════════════════ */
 
@@ -564,6 +696,11 @@ int main(void)
     RUN_TEST(grant_without_url_field_is_failure);
     RUN_TEST(idle_state_ignores_grant);
 
+    /* Group B2: Grant/timeout race regressions */
+    RUN_TEST(late_grant_after_timeout_does_not_double_release);
+    RUN_TEST(timeout_after_grant_handoff_is_noop);
+    RUN_TEST(grant_hands_off_without_blocking_publish);
+
     /* Group C: Quota backoff */
     RUN_TEST(quota_exceeded_releases_fb_returns_to_idle);
     RUN_TEST(quota_backoff_suppresses_next_capture);
@@ -576,6 +713,11 @@ int main(void)
     /* Group E: MCP tool */
     RUN_TEST(mcp_capture_returns_queued_on_success);
     RUN_TEST(mcp_capture_publishes_request);
+
+    /* Group F: HW frame-size mapping */
+    RUN_TEST(hw_init_maps_svga_to_real_framesize);
+    RUN_TEST(hw_init_maps_qvga_to_real_framesize);
+    RUN_TEST(hw_init_maps_uxga_to_real_framesize);
 
     printf("\n═══════════════════════════════════════════\n");
     printf("  Results: %d passed, %d failed\n", s_passed, s_failed);

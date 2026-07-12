@@ -90,7 +90,7 @@ def generate_driver_init_c(config: dict, output_path: Path):
             cfg_type = "relay_config_t"
         elif name == "camera":
             cfg_init = _camera_config(drv_config)
-            cfg_type = "camera_config_t"
+            cfg_type = "camera_driver_config_t"
         else:
             print(f"Warning: Unknown driver '{name}', generating generic config")
             cfg_init = "{0}"

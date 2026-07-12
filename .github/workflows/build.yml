@@ -35,6 +35,21 @@ jobs:
           rm -rf firmware/jettyd-sdk
           ln -s ../jettyd-sdk firmware/jettyd-sdk
           sed -i "s/target: .*/target: \"${{ matrix.target }}\"/" firmware/device.yaml
+          # Camera-enabled S3 leg: append a camera instance so `main` REQUIRES
+          # the camera driver and camera.c is compiled against the real
+          # espressif/esp32-camera component (not just the host mock). The
+          # template's device.yaml lists `drivers:` last, so a list item can be
+          # appended. Other targets are left unchanged (camera compiles to a
+          # no-op stub there).
+          if [ "${{ matrix.target }}" = "esp32s3" ]; then
+            cat >> firmware/device.yaml <<'CAMYAML'
+  - name: camera
+    instance: cam
+    config:
+      sensor: ov2640
+      frame_size: svga
+CAMYAML
+          fi
           rm -f firmware/sdkconfig
           rm -rf firmware/build
 

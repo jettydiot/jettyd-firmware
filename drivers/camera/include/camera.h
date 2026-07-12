@@ -35,6 +35,10 @@ typedef enum {
  *
  * All DVP pin assignments for the selected sensor are encoded in a
  * named preset constant inside camera.c — no hardcoded pins in logic.
+ *
+ * This is the driver's user-facing config (populated from device.yaml).
+ * It is intentionally distinct from the esp32-camera component's own
+ * `camera_config_t` HW-init struct, which camera.c maps onto internally.
  * ------------------------------------------------------------------ */
 
 typedef struct {
@@ -43,14 +47,14 @@ typedef struct {
     uint8_t             jpeg_quality;         /**< 0–63; lower = better quality */
     uint32_t            capture_interval_sec; /**< Periodic capture; 0 = disabled */
     uint32_t            grant_timeout_sec;    /**< media/grant wait timeout (default 30) */
-} camera_config_t;
+} camera_driver_config_t;
 
 /* ------------------------------------------------------------------
  * Public API
  * ------------------------------------------------------------------ */
 
 /**
- * @brief Validate and normalise a camera_config_t.
+ * @brief Validate and normalise a camera_driver_config_t.
  *
  * Rejects unsupported sensors (ESP_ERR_INVALID_ARG).
  * Silently clamps jpeg_quality > 63 to 63.
@@ -59,7 +63,7 @@ typedef struct {
  * @param cfg  Config to validate (modified in-place for clamping).
  * @return ESP_OK or ESP_ERR_INVALID_ARG.
  */
-esp_err_t camera_config_validate(camera_config_t *cfg);
+esp_err_t camera_config_validate(camera_driver_config_t *cfg);
 
 /**
  * @brief Register a camera driver instance.
@@ -72,7 +76,7 @@ esp_err_t camera_config_validate(camera_config_t *cfg);
  * cleanly without registering anything.
  *
  * @param instance  Instance name (e.g., "cam").
- * @param config    Pointer to camera_config_t.
+ * @param config    Pointer to camera_driver_config_t.
  */
 void camera_register(const char *instance, const void *config);
 

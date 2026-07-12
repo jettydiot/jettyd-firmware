@@ -42,8 +42,8 @@ in `camera.c`.
 | PCLK | 11 |
 | VSYNC | 6 |
 | HREF | 7 |
-| SSCB SDA | 4 |
-| SSCB SCL | 5 |
+| SCCB SDA | 4 |
+| SCCB SCL | 5 |
 | PWDN | — (not connected) |
 | RESET | — (not connected) |
 
@@ -59,7 +59,20 @@ PSRAM must be enabled in `sdkconfig` (`CONFIG_ESP32S3_SPIRAM_SUPPORT=y`).
 
 ## Upload flow
 
-```
+The `media/grant` MQTT callback runs on the esp-mqtt client task, so it must
+return quickly. It only parses and validates the grant, then hands the
+presigned URL to a **dedicated upload task** via a FreeRTOS queue. That task
+performs the blocking, multi-second HTTPS PUT and publishes `media/complete`,
+so telemetry, commands, and MQTT keepalive are never stalled by an upload.
+
+State machine: `IDLE → AWAIT_GRANT → UPLOADING → IDLE`. State transitions are
+serialised with a `portMUX` critical section (the MQTT task, timer daemon, MCP
+dispatch, and upload task all touch it). The grant timeout callback only acts
+while state is `AWAIT_GRANT`; once a grant has been accepted (`UPLOADING`) a
+late/queued timeout callback is a no-op, so it can never release a framebuffer
+the upload task is still streaming.
+
+```text
 Device                                 Platform
   │                                       │
   │──── capture JPEG ────────────────────►│
@@ -80,7 +93,7 @@ Device                                 Platform
 
 ### Quota exceeded path
 
-```
+```text
   │◄─── media/grant ────────────────────│
   │      {quota_exceeded: true,           │
   │       retry_after_sec: 60}            │
@@ -91,7 +104,7 @@ Device                                 Platform
 
 ### Grant timeout path
 
-```
+```text
   │──── media/request ──────────────────►│
   │                                       │
   │  ... grant_timeout_sec elapses ...    │

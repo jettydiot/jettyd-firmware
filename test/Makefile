@@ -53,7 +53,7 @@ build/test_mcp_tools: test_mcp_tools.c $(SDK_SRC) | build
 	$(CC) $(CFLAGS) -o $@ $^
 
 build/test_camera: test_camera.c $(SDK_SRC) | build
-	$(CC) $(CFLAGS) -DJETTYD_CAMERA_SUPPORTED=1 -o $@ $^
+	$(CC) $(CFLAGS) -DCONFIG_JETTYD_CAMERA_SUPPORTED=1 -o $@ $^
 
 build:
 	mkdir -p build
