@@ -4,18 +4,22 @@
  */
 
 #include "jettyd_wifi.h"
+#include "esp_log.h"
+#include "sdkconfig.h"
+#include <stdbool.h>
+
+static const char *TAG = "jettyd_wifi";
+
+#if CONFIG_SOC_WIFI_SUPPORTED
+
 #include "jettyd_nvs.h"
 #include "jettyd_provision.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_timer.h"
-#include "esp_log.h"
-#include <stdbool.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include <string.h>
-
-static const char *TAG = "jettyd_wifi";
 
 #define WIFI_CONNECTED_BIT  BIT0
 #define WIFI_FAIL_BIT       BIT1
@@ -157,3 +161,56 @@ bool jettyd_wifi_is_connected(void)
 {
     return s_state == JETTYD_WIFI_CONNECTED;
 }
+
+#else /* !CONFIG_SOC_WIFI_SUPPORTED */
+
+static bool s_warned = false;
+
+static void warn_once(void)
+{
+    if (s_warned) {
+        return;
+    }
+    ESP_LOGW(TAG, "WiFi not supported on this SoC — all WiFi calls return ESP_ERR_NOT_SUPPORTED");
+    s_warned = true;
+}
+
+esp_err_t jettyd_wifi_init(void)
+{
+    warn_once();
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t jettyd_wifi_connect(void)
+{
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t jettyd_wifi_connect_with(const char *ssid, const char *password)
+{
+    (void)ssid;
+    (void)password;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t jettyd_wifi_disconnect(void)
+{
+    return ESP_OK;
+}
+
+jettyd_wifi_state_t jettyd_wifi_get_state(void)
+{
+    return JETTYD_WIFI_DISCONNECTED;
+}
+
+int8_t jettyd_wifi_get_rssi(void)
+{
+    return 0;
+}
+
+bool jettyd_wifi_is_connected(void)
+{
+    return false;
+}
+
+#endif /* CONFIG_SOC_WIFI_SUPPORTED */
