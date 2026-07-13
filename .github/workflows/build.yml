@@ -35,20 +35,31 @@ jobs:
           rm -rf firmware/jettyd-sdk
           ln -s ../jettyd-sdk firmware/jettyd-sdk
           sed -i "s/target: .*/target: \"${{ matrix.target }}\"/" firmware/device.yaml
-          # Camera-enabled S3 leg: append a camera instance so `main` REQUIRES
-          # the camera driver and camera.c is compiled against the real
-          # espressif/esp32-camera component (not just the host mock). The
-          # template's device.yaml lists `drivers:` last, so a list item can be
-          # appended. Other targets are left unchanged (camera compiles to a
-          # no-op stub there).
+          # Camera-enabled S3 leg: add a camera instance so `main` REQUIRES the
+          # camera driver and camera.c is compiled against the real
+          # espressif/esp32-camera component (not just the host mock). The item
+          # must join the `drivers:` list. The template's device.yaml ends with
+          # a `defaults:` (telemetry) mapping, NOT `drivers:`, so appending to
+          # EOF lands the item under defaults: and breaks YAML parsing. Insert
+          # it at the end of the drivers list instead (before the first
+          # top-level line after `drivers:`). Other targets are left unchanged
+          # (camera compiles to a no-op stub there).
           if [ "${{ matrix.target }}" = "esp32s3" ]; then
-            printf '%s\n' \
-              '  - name: camera' \
-              '    instance: cam' \
-              '    config:' \
-              '      sensor: ov2640' \
-              '      frame_size: svga' \
-              >> firmware/device.yaml
+            awk '
+              /^drivers:/ { indrivers=1; print; next }
+              indrivers && !done && /^[^[:space:]-]/ {
+                print "  - name: camera";
+                print "    instance: cam";
+                print "    config:";
+                print "      sensor: ov2640";
+                print "      frame_size: svga";
+                print "";
+                done=1
+              }
+              { print }
+              END { if (!done) { print "ERROR: camera not inserted into drivers list" > "/dev/stderr"; exit 3 } }
+            ' firmware/device.yaml > firmware/device.yaml.tmp
+            mv firmware/device.yaml.tmp firmware/device.yaml
           fi
           rm -f firmware/sdkconfig
           rm -rf firmware/build
