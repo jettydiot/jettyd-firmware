@@ -82,6 +82,13 @@ esp_err_t camera_config_validate(camera_driver_config_t *cfg)
 #include "esp_http_client.h"
 #include "mbedtls/sha256.h"
 
+/* Number of AE/AWB settle frames to grab-and-discard after sensor init.
+ * Set via Kconfig (JETTYD_CAMERA_SETTLE_FRAMES, default 5, range 0-30); this
+ * fallback keeps host unit tests (which have no sdkconfig) compiling. */
+#if !defined(CONFIG_JETTYD_CAMERA_SETTLE_FRAMES)
+#define CONFIG_JETTYD_CAMERA_SETTLE_FRAMES 5
+#endif
+
 /* ------------------------------------------------------------------
  * OV2640 DVP pin preset for standard ESP32-S3-CAM board wiring.
  * All DVP assignments live here — never scattered in runtime logic.
@@ -335,12 +342,33 @@ static void camera_upload_task(void *arg)
 }
 
 /* ------------------------------------------------------------------
- * AE/AWB settle — TDD placeholder (real body added in the impl commit).
+ * AE/AWB settle
+ *
+ * The OV2640's first frames after sensor power-up are underexposed (the very
+ * first is typically pitch black); auto-exposure and auto-white-balance only
+ * converge after several frames. Grab and immediately discard `n` frames so
+ * the first frame we actually upload is properly exposed. n == 0 disables it.
+ *
+ * Called after a successful esp_camera_init() (camera_hw_init). The driver
+ * keeps the sensor powered between captures, so a single settle at init is
+ * sufficient; if a future revision powers the sensor down between captures,
+ * call this again on each wake before the upload capture.
  * ------------------------------------------------------------------ */
 
-static void __attribute__((unused)) camera_settle(uint32_t n)
+static void camera_settle(uint32_t n)
 {
-    (void)n;
+    for (uint32_t i = 0; i < n; i++) {
+        camera_fb_t *fb = esp_camera_fb_get();
+        if (!fb) {
+            ESP_LOGW(TAG, "settle: fb_get returned NULL at frame %" PRIu32 "/%" PRIu32,
+                     i + 1, n);
+            continue;
+        }
+        esp_camera_fb_return(fb);
+    }
+    if (n > 0) {
+        ESP_LOGI(TAG, "AE/AWB settle: discarded %" PRIu32 " frame(s)", n);
+    }
 }
 
 /* ------------------------------------------------------------------
@@ -579,6 +607,9 @@ void camera_register(const char *instance, const void *config)
                  esp_err_to_name(err));
         return;
     }
+
+    /* Discard AE/AWB settle frames so the first uploaded frame is exposed. */
+    camera_settle((uint32_t)CONFIG_JETTYD_CAMERA_SETTLE_FRAMES);
 
     /* Upload queue + dedicated upload task (keeps the blocking PUT off the
      * MQTT event task). */

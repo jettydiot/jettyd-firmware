@@ -57,6 +57,30 @@ PSRAM must be enabled in `sdkconfig` (`CONFIG_ESP32S3_SPIRAM_SUPPORT=y`).
 | MCP command | Call MCP tool `camera_capture` over MQTT (`mcp/call` topic). Non-blocking — returns immediately while upload runs asynchronously. |
 | GPIO/button | Deferred to a follow-up ticket (FLU-159). |
 
+## AE/AWB settling
+
+The OV2640's first frames after sensor power-up are underexposed — the very
+first frame is typically **pitch black**, and auto-exposure/auto-white-balance
+converge only after several frames (~3–5 during P4 camera bring-up). Without
+settling, a grant-triggered capture that grabs the first frame would upload a
+black/garbage image.
+
+To avoid this, right after `esp_camera_init()` the driver grabs and immediately
+**discards** a configurable number of settle frames, so the first frame it
+actually uploads is properly exposed. The driver keeps the sensor powered
+between captures, so a single settle pass at init is sufficient. (If a future
+revision powers the sensor down between captures, settling must be repeated on
+each wake before the upload capture.)
+
+Configured at build time via Kconfig (not `device.yaml`):
+
+| Kconfig symbol | Default | Range | Meaning |
+|----------------|---------|-------|---------|
+| `CONFIG_JETTYD_CAMERA_SETTLE_FRAMES` | `5` | 0–30 | Frames to grab-and-discard after sensor init. `0` disables settling. |
+
+The default of 5 matches the ~3–5 frame convergence observed on hardware. Host
+unit tests, which have no `sdkconfig`, fall back to the same default of 5.
+
 ## Upload flow
 
 The `media/grant` MQTT callback runs on the esp-mqtt client task, so it must
