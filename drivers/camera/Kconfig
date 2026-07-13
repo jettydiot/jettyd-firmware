@@ -1,0 +1,31 @@
+menu "Camera Driver"
+
+config JETTYD_CAMERA_SUPPORTED
+    bool "Enable camera driver (OV2640)"
+    default y if IDF_TARGET_ESP32S3
+    default n
+    depends on IDF_TARGET_ESP32S3
+    help
+        Compile the full OV2640 camera implementation.
+        On non-camera targets (esp32c3, esp32c6) this is automatically
+        disabled and camera_register() compiles to a no-op stub so all
+        CI matrix legs remain green.
+
+config JETTYD_CAMERA_SETTLE_FRAMES
+    int "AE/AWB settle frames to discard after sensor init"
+    default 5
+    range 0 30
+    depends on JETTYD_CAMERA_SUPPORTED
+    help
+        Number of frames to grab and immediately discard right after the
+        OV2640 is initialised, before the first frame that gets uploaded.
+
+        The sensor's first frames after power-up are underexposed (the very
+        first is typically pitch black); auto-exposure and auto-white-balance
+        converge only after several frames. Discarding these settle frames
+        ensures a grant-triggered capture never uploads a black/garbage frame.
+
+        Default 5 (matches the ~3-5 frame convergence seen during P4 camera
+        bring-up). Set to 0 to disable settling.
+
+endmenu

@@ -1,0 +1,36 @@
+name: camera
+description: "ESP32-S3 + OV2640 camera driver — JPEG capture and upload via media grant flow"
+category: sensor
+
+config_schema:
+  sensor:
+    type: string
+    enum: [ov2640]
+    required: true
+    description: "Camera sensor model (only ov2640 supported in v1)"
+  frame_size:
+    type: string
+    enum: [qvga, vga, svga, xga, uxga]
+    default: svga
+    description: "JPEG output resolution"
+  jpeg_quality:
+    type: int
+    default: 12
+    minimum: 0
+    maximum: 63
+    description: "JPEG quality 0–63 (lower number = higher quality / larger file)"
+  capture_interval_sec:
+    type: int
+    default: 0
+    description: "Periodic capture interval in seconds; 0 = interval disabled"
+  grant_timeout_sec:
+    type: int
+    default: 30
+    description: "Seconds to wait for media/grant before treating as failure"
+
+esp_idf_components:
+  - esp_http_client
+  - mbedtls
+
+compatible_targets:
+  - esp32s3

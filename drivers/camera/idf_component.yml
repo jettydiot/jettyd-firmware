@@ -1,0 +1,7 @@
+## IDF Component Manager manifest for the camera driver.
+## Declares the espressif/esp32-camera dependency scoped to this driver only.
+## Other drivers and non-S3 targets are unaffected.
+
+dependencies:
+  espressif/esp32-camera:
+    version: ">=2.0.0"

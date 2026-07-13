@@ -111,6 +111,22 @@ typedef int BaseType_t;
 #define xTimerStop(t, w)        (pdPASS)
 #define xTimerChangePeriod(t,p,w) (pdPASS)
 
+/* ── Queues + critical sections (used by the camera upload hand-off) ─────── */
+
+typedef void *QueueHandle_t;
+
+#ifndef portMAX_DELAY
+#define portMAX_DELAY ((TickType_t)0xffffffffUL)
+#endif
+
+/* portMUX critical sections are a no-op on the single-threaded host runner. */
+typedef struct { int owner; } portMUX_TYPE;
+#define portMUX_INITIALIZER_UNLOCKED { 0 }
+#define portENTER_CRITICAL(mux)      ((void)(mux))
+#define portEXIT_CRITICAL(mux)       ((void)(mux))
+#define portENTER_CRITICAL_ISR(mux)  ((void)(mux))
+#define portEXIT_CRITICAL_ISR(mux)   ((void)(mux))
+
 /* ── GPIO stubs ─────────────────────────────────────────────────────────── */
 
 typedef int gpio_num_t;
@@ -177,6 +193,7 @@ typedef int ledc_timer_bit_t;
 #define LEDC_HIGH_SPEED_MODE 0
 #define LEDC_TIMER_13_BIT    13
 #define LEDC_TIMER_0         0
+#define LEDC_CHANNEL_0       0
 
 typedef struct { int x; } ledc_timer_config_t;
 typedef struct { int x; } ledc_channel_config_t;

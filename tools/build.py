@@ -88,6 +88,9 @@ def generate_driver_init_c(config: dict, output_path: Path):
         elif name == "relay":
             cfg_init = _relay_config(drv_config)
             cfg_type = "relay_config_t"
+        elif name == "camera":
+            cfg_init = _camera_config(drv_config)
+            cfg_type = "camera_driver_config_t"
         else:
             print(f"Warning: Unknown driver '{name}', generating generic config")
             cfg_init = "{0}"
@@ -234,6 +237,37 @@ def _relay_config(cfg: dict) -> str:
         f'        .active_high = {active_high},\n'
         f'        .default_state_on = {default_on},\n'
         f'        .max_on_duration = {max_dur},\n'
+        f'    }}'
+    )
+
+
+def _camera_config(cfg: dict) -> str:
+    sensor_str = cfg.get("sensor", "ov2640").upper()
+    if sensor_str != "OV2640":
+        print(f"Error: camera driver only supports sensor 'ov2640', got '{cfg.get('sensor')}'")
+        sys.exit(1)
+    frame_map = {
+        "qvga": "CAMERA_FRAME_QVGA",
+        "vga":  "CAMERA_FRAME_VGA",
+        "svga": "CAMERA_FRAME_SVGA",
+        "xga":  "CAMERA_FRAME_XGA",
+        "uxga": "CAMERA_FRAME_UXGA",
+    }
+    frame_raw = cfg.get("frame_size", "svga").lower()
+    frame = frame_map.get(frame_raw)
+    if frame is None:
+        print(f"Error: unknown camera frame_size '{frame_raw}'")
+        sys.exit(1)
+    quality = int(cfg.get("jpeg_quality", 12))
+    interval = int(cfg.get("capture_interval_sec", 0))
+    timeout = int(cfg.get("grant_timeout_sec", 30))
+    return (
+        f'{{\n'
+        f'        .sensor = CAMERA_SENSOR_OV2640,\n'
+        f'        .frame_size = {frame},\n'
+        f'        .jpeg_quality = {quality},\n'
+        f'        .capture_interval_sec = {interval},\n'
+        f'        .grant_timeout_sec = {timeout},\n'
         f'    }}'
     )
 
