@@ -42,13 +42,13 @@ jobs:
           # appended. Other targets are left unchanged (camera compiles to a
           # no-op stub there).
           if [ "${{ matrix.target }}" = "esp32s3" ]; then
-            cat >> firmware/device.yaml <<'CAMYAML'
-  - name: camera
-    instance: cam
-    config:
-      sensor: ov2640
-      frame_size: svga
-CAMYAML
+            printf '%s\n' \
+              '  - name: camera' \
+              '    instance: cam' \
+              '    config:' \
+              '      sensor: ov2640' \
+              '      frame_size: svga' \
+              >> firmware/device.yaml
           fi
           rm -f firmware/sdkconfig
           rm -rf firmware/build
