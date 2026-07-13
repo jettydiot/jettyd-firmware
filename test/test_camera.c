@@ -36,6 +36,12 @@ bool         g_camera_init_ok = true;
 int          g_fb_return_count = 0;
 int          g_camera_init_frame_size  = -1;
 int          g_camera_init_fb_location = -1;
+int          g_fb_get_count    = 0;
+
+/* AE/AWB settle sequence-mode frames (FLU-157) */
+bool         g_fb_seq_mode = false;
+camera_fb_t  g_fb_seq_frames[MOCK_FB_SEQ_MAX];
+uint8_t      g_fb_seq_data[512];
 
 bool   g_psram_available     = true;
 
@@ -173,6 +179,8 @@ static void camera_test_reset(void)
     g_fb_return_count  = 0;
     g_camera_init_frame_size  = -1;
     g_camera_init_fb_location = -1;
+    g_fb_get_count     = 0;
+    g_fb_seq_mode      = false;
     g_psram_available  = true;
 
     /* HTTP mock */
@@ -666,6 +674,74 @@ TEST(hw_init_maps_uxga_to_real_framesize) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
+ * Group G: AE/AWB settle frames (FLU-157 revision)
+ *
+ * The OV2640's first frames after sensor init are underexposed (pitch black);
+ * auto-exposure/white-balance converge only after several frames. The driver
+ * grabs and DISCARDS CONFIG_JETTYD_CAMERA_SETTLE_FRAMES frames after init so
+ * the first frame it actually uploads is properly exposed.
+ *
+ * camera_settle(n) is exercised directly (camera_register calls it with the
+ * Kconfig value after a successful hw_init).
+ * ══════════════════════════════════════════════════════════════════════ */
+
+/* Settle discards exactly N frames — each grabbed frame is returned. */
+TEST(settle_discards_configured_frame_count) {
+    init_test_fb();
+    camera_settle(5);
+    ASSERT_EQ(g_fb_get_count, 5);
+    ASSERT_EQ(g_fb_return_count, 5);   /* every settle frame returned */
+}
+
+/* N == 0 disables settling: no frame is grabbed or discarded. */
+TEST(settle_zero_frames_discards_nothing) {
+    init_test_fb();
+    camera_settle(0);
+    ASSERT_EQ(g_fb_get_count, 0);
+    ASSERT_EQ(g_fb_return_count, 0);
+}
+
+/* Settle frames are never uploaded: settling grabs+returns only, it publishes
+ * nothing and leaves the state machine idle with no framebuffer held. The
+ * subsequent capture obtains a FRESH frame for upload. */
+TEST(settle_frames_are_not_uploaded) {
+    g_fb_seq_mode = true;              /* distinct, seq-stamped frames */
+    camera_settle(5);
+
+    /* Settling alone: all 5 discarded, nothing published, nothing held. */
+    ASSERT_EQ(g_fb_return_count, 5);
+    ASSERT_TRUE(!s_publish_called);
+    ASSERT_EQ(s_upload_state, CAM_STATE_IDLE);
+    ASSERT_TRUE(s_fb == NULL);
+
+    /* The upload frame is a fresh grab, distinct from every settle frame. */
+    camera_trigger_capture();
+    ASSERT_TRUE(s_fb != NULL);
+    ASSERT_TRUE(s_fb->width > 5);      /* not one of settle frames 1..5 */
+}
+
+/* The uploaded frame is the (N+1)th frame grabbed from the sensor. */
+TEST(upload_uses_frame_after_settle) {
+    g_fb_seq_mode = true;
+    camera_settle(5);                  /* grabs frames 1..5 (all discarded) */
+
+    camera_trigger_capture();          /* grabs the 6th frame for upload */
+    ASSERT_EQ(g_fb_get_count, 6);      /* N + 1 */
+    ASSERT_TRUE(s_fb != NULL);
+    ASSERT_EQ((int)s_fb->width, 6);    /* the (N+1)th frame is the upload frame */
+    ASSERT_EQ(s_upload_state, CAM_STATE_AWAIT_GRANT);
+}
+
+/* Settling tolerates a transient NULL frame (fb_get miss) without stalling
+ * or over-counting returns. */
+TEST(settle_survives_null_frame) {
+    g_test_fb = NULL;                  /* fb_get returns NULL every time */
+    camera_settle(3);
+    ASSERT_EQ(g_fb_get_count, 3);      /* still attempted N grabs */
+    ASSERT_EQ(g_fb_return_count, 0);   /* nothing to return */
+}
+
+/* ══════════════════════════════════════════════════════════════════════
  * Main
  * ══════════════════════════════════════════════════════════════════════ */
 
@@ -718,6 +794,13 @@ int main(void)
     RUN_TEST(hw_init_maps_svga_to_real_framesize);
     RUN_TEST(hw_init_maps_qvga_to_real_framesize);
     RUN_TEST(hw_init_maps_uxga_to_real_framesize);
+
+    /* Group G: AE/AWB settle frames */
+    RUN_TEST(settle_discards_configured_frame_count);
+    RUN_TEST(settle_zero_frames_discards_nothing);
+    RUN_TEST(settle_frames_are_not_uploaded);
+    RUN_TEST(upload_uses_frame_after_settle);
+    RUN_TEST(settle_survives_null_frame);
 
     printf("\n═══════════════════════════════════════════\n");
     printf("  Results: %d passed, %d failed\n", s_passed, s_failed);

@@ -335,6 +335,15 @@ static void camera_upload_task(void *arg)
 }
 
 /* ------------------------------------------------------------------
+ * AE/AWB settle — TDD placeholder (real body added in the impl commit).
+ * ------------------------------------------------------------------ */
+
+static void __attribute__((unused)) camera_settle(uint32_t n)
+{
+    (void)n;
+}
+
+/* ------------------------------------------------------------------
  * State machine: capture trigger
  * ------------------------------------------------------------------ */
 

@@ -103,6 +103,17 @@ extern bool         g_camera_init_ok;      /**< Whether esp_camera_init succeeds
 extern int          g_fb_return_count;     /**< How many times fb_return was called */
 extern int          g_camera_init_frame_size;  /**< framesize_t seen by esp_camera_init */
 extern int          g_camera_init_fb_location; /**< fb_location seen by esp_camera_init */
+extern int          g_fb_get_count;        /**< How many times fb_get was called */
+
+/* AE/AWB settle testing (FLU-157): in sequence mode each esp_camera_fb_get()
+ * returns a DISTINCT framebuffer stamped with its 1-based capture sequence
+ * number in ->width, so a test can prove exactly which frame was uploaded
+ * (settle frames are discarded; the upload frame must be the (N+1)th). */
+extern bool         g_fb_seq_mode;         /**< Return distinct, seq-stamped frames */
+
+#define MOCK_FB_SEQ_MAX 64
+extern camera_fb_t  g_fb_seq_frames[MOCK_FB_SEQ_MAX];
+extern uint8_t      g_fb_seq_data[512];
 
 /* ------------------------------------------------------------------
  * Inline stubs
@@ -119,7 +130,21 @@ static inline esp_err_t esp_camera_init(const camera_config_t *c)
 
 static inline esp_err_t esp_camera_deinit(void) { return ESP_OK; }
 
-static inline camera_fb_t *esp_camera_fb_get(void) { return g_test_fb; }
+static inline camera_fb_t *esp_camera_fb_get(void)
+{
+    int n = ++g_fb_get_count;              /* 1-based capture sequence number */
+    if (g_fb_seq_mode) {
+        int idx = (n <= MOCK_FB_SEQ_MAX) ? n - 1 : MOCK_FB_SEQ_MAX - 1;
+        camera_fb_t *f = &g_fb_seq_frames[idx];
+        f->buf    = g_fb_seq_data;
+        f->len    = sizeof(g_fb_seq_data);
+        f->width  = (size_t)n;             /* seq marker: identifies this frame */
+        f->height = 0;
+        f->format = PIXFORMAT_JPEG;
+        return f;
+    }
+    return g_test_fb;
+}
 
 static inline void esp_camera_fb_return(camera_fb_t *fb)
 {
