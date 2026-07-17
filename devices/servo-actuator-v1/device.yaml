@@ -1,0 +1,39 @@
+name: "servo-actuator-v1"
+version: "1.0.0"
+target: "esp32c6"
+description: "Single-channel hobby servo actuator"
+
+drivers:
+  - name: servo
+    instance: "servo"
+    config:
+      pin: 2
+      ledc_channel: 0
+      min_pulse_us: 500
+      max_pulse_us: 2500
+      max_angle: 180
+      home_angle: 0
+      idle_detach: true
+
+defaults:
+  heartbeat_interval: 30
+  report_metrics:
+    - "servo.angle"
+    - "system.rssi"
+
+mqtt:
+  keepalive: 30
+  qos: 1
+  buffer_on_disconnect: true
+  max_buffer_size: 20
+
+power:
+  deep_sleep: false
+  sleep_duration: null
+  wake_on_pin: null
+
+hardware:
+  has_battery: false
+  battery_adc_pin: -1
+  battery_voltage_divider: 1.0
+  status_led_pin: 15

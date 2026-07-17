@@ -13,7 +13,8 @@ CFLAGS  := -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -g \
            -I../jettyd/include \
            -I../drivers/button/include \
            -I../drivers/led/include \
-           -I../drivers/camera/include
+           -I../drivers/camera/include \
+           -I../drivers/servo/include
 
 SDK_SRC := ../jettyd/src/driver_registry.c
 
@@ -21,7 +22,7 @@ SDK_SRC := ../jettyd/src/driver_registry.c
 
 all: test
 
-test: build/test_drivers build/test_button build/test_manifest build/test_mcp_tools build/test_camera
+test: build/test_drivers build/test_button build/test_manifest build/test_mcp_tools build/test_camera build/test_servo
 	@echo ""
 	@echo "Running test_drivers..."
 	@./build/test_drivers
@@ -38,12 +39,18 @@ test: build/test_drivers build/test_button build/test_manifest build/test_mcp_to
 	@echo "Running test_camera..."
 	@./build/test_camera
 	@echo ""
+	@echo "Running test_servo..."
+	@./build/test_servo
+	@echo ""
 	@echo "✅ All test suites passed"
 
 build/test_drivers: test_drivers.c $(SDK_SRC) | build
 	$(CC) $(CFLAGS) -o $@ $^
 
 build/test_button: test_button.c | build
+	$(CC) $(CFLAGS) -o $@ $<
+
+build/test_servo: test_servo.c | build
 	$(CC) $(CFLAGS) -o $@ $<
 
 build/test_manifest: test_manifest.c $(SDK_SRC) | build

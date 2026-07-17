@@ -109,6 +109,7 @@ typedef int BaseType_t;
 #define xTimerCreate(n,p,r,i,cb) (NULL)
 #define xTimerStart(t, w)       (pdPASS)
 #define xTimerStop(t, w)        (pdPASS)
+#define xTimerDelete(t, w)      (pdPASS)
 #define xTimerChangePeriod(t,p,w) (pdPASS)
 
 /* ── Queues + critical sections (used by the camera upload hand-off) ─────── */
@@ -184,19 +185,40 @@ static inline esp_err_t gpio_isr_handler_add(gpio_num_t gpio, gpio_isr_t isr, vo
     return ESP_OK;
 }
 
-/* ── driver/ledc.h stubs (for pwm_output) ──────────────────────────────── */
+/* ── driver/ledc.h stubs (for pwm_output, servo) ────────────────────────── */
 
 typedef int ledc_channel_t;
 typedef int ledc_mode_t;
 typedef int ledc_timer_t;
 typedef int ledc_timer_bit_t;
+typedef int ledc_intr_type_t;
+typedef int ledc_clk_cfg_t;
 #define LEDC_HIGH_SPEED_MODE 0
+#define LEDC_LOW_SPEED_MODE  1
 #define LEDC_TIMER_13_BIT    13
 #define LEDC_TIMER_0         0
 #define LEDC_CHANNEL_0       0
+#define LEDC_INTR_DISABLE    0
+#define LEDC_AUTO_CLK        0
 
-typedef struct { int x; } ledc_timer_config_t;
-typedef struct { int x; } ledc_channel_config_t;
+typedef struct {
+    ledc_mode_t speed_mode;
+    ledc_timer_bit_t duty_resolution;
+    ledc_timer_t timer_num;
+    uint32_t freq_hz;
+    ledc_clk_cfg_t clk_cfg;
+} ledc_timer_config_t;
+
+typedef struct {
+    int gpio_num;
+    ledc_mode_t speed_mode;
+    ledc_channel_t channel;
+    ledc_intr_type_t intr_type;
+    ledc_timer_t timer_sel;
+    uint32_t duty;
+    int hpoint;
+} ledc_channel_config_t;
+
 static inline esp_err_t ledc_timer_config(const ledc_timer_config_t *c)   { (void)c; return ESP_OK; }
 static inline esp_err_t ledc_channel_config(const ledc_channel_config_t *c) { (void)c; return ESP_OK; }
 static inline esp_err_t ledc_set_duty(ledc_mode_t m, ledc_channel_t c, uint32_t d) { (void)m; (void)c; (void)d; return ESP_OK; }

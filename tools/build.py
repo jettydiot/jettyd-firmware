@@ -91,6 +91,9 @@ def generate_driver_init_c(config: dict, output_path: Path):
         elif name == "camera":
             cfg_init = _camera_config(drv_config)
             cfg_type = "camera_driver_config_t"
+        elif name == "servo":
+            cfg_init = _servo_config(drv_config)
+            cfg_type = "servo_config_t"
         else:
             print(f"Warning: Unknown driver '{name}', generating generic config")
             cfg_init = "{0}"
@@ -237,6 +240,27 @@ def _relay_config(cfg: dict) -> str:
         f'        .active_high = {active_high},\n'
         f'        .default_state_on = {default_on},\n'
         f'        .max_on_duration = {max_dur},\n'
+        f'    }}'
+    )
+
+
+def _servo_config(cfg: dict) -> str:
+    pin = cfg.get("pin", 2)
+    ledc_channel = cfg.get("ledc_channel", 0)
+    min_pulse_us = cfg.get("min_pulse_us", 500)
+    max_pulse_us = cfg.get("max_pulse_us", 2500)
+    max_angle = cfg.get("max_angle", 180)
+    home_angle = cfg.get("home_angle", 0)
+    idle_detach = "true" if cfg.get("idle_detach", True) else "false"
+    return (
+        f'{{\n'
+        f'        .pin = {pin},\n'
+        f'        .ledc_channel = {ledc_channel},\n'
+        f'        .min_pulse_us = {min_pulse_us},\n'
+        f'        .max_pulse_us = {max_pulse_us},\n'
+        f'        .max_angle = {max_angle},\n'
+        f'        .home_angle = {home_angle},\n'
+        f'        .idle_detach = {idle_detach},\n'
         f'    }}'
     )
 
