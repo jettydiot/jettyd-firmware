@@ -788,13 +788,25 @@ static esp_err_t execute_action(const jettyd_action_t *action)
         if (drv == NULL || drv->write == NULL) {
             return ESP_ERR_NOT_FOUND;
         }
+        /* Resolve the driver's first writable capability — drivers compare the
+         * capability name with strcmp, so passing NULL here is not safe. */
+        const char *cap = NULL;
+        for (uint8_t i = 0; i < drv->capability_count; i++) {
+            if (drv->capabilities[i].type == JETTYD_CAP_WRITABLE) {
+                cap = drv->capabilities[i].name;
+                break;
+            }
+        }
+        if (cap == NULL) {
+            return ESP_ERR_NOT_SUPPORTED;
+        }
         jettyd_value_t val = {
             .type = JETTYD_VAL_FLOAT,
             .float_val = action->set_value.value,
             .valid = true
         };
-        ESP_LOGI(TAG, "Action: set_value %s = %.2f", action->target, val.float_val);
-        return drv->write(NULL, val);
+        ESP_LOGI(TAG, "Action: set_value %s.%s = %.2f", action->target, cap, val.float_val);
+        return drv->write(cap, val);
     }
 
     case JETTYD_ACTION_REPORT: {
