@@ -18,14 +18,25 @@ without blocking the MQTT/command task.
 
 ### Example
 
+Platform commands address the driver instance as `<instance>.<action>`
+(instance is `servo` in the stock `servo-actuator-v1` device):
+
 ```json
-{ "action": "rotate", "params": { "angle": 120, "hold_ms": 500 } }
+{ "action": "servo.rotate", "params": { "angle": 120, "hold_ms": 500 } }
 ```
 
-The `angle` capability can also be written directly (no hold/return):
+The `angle` capability can also be written directly via the core `set`
+action (no hold/return):
 
 ```json
-{ "action": "set_value", "target": "gate", "params": { "value": 45 } }
+{ "action": "servo.set", "params": { "angle": 45 } }
+```
+
+From a rules (JettyScript) `then` block, use the VM's `set_value` action
+with the instance as target:
+
+```json
+{ "action": "set_value", "target": "servo", "params": { "value": 45 } }
 ```
 
 ## Idle detach
