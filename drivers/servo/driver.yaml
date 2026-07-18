@@ -1,0 +1,47 @@
+name: servo
+description: "LEDC-based hobby servo actuator, 50 Hz, with rotate-hold-return command"
+category: actuator
+capabilities:
+  - name: angle
+    type: writable
+    value_type: float
+    unit: "deg"
+    description: "Commanded angle, clamped to [0, max_angle]"
+
+config_schema:
+  pin:
+    type: int
+    required: true
+    description: "GPIO pin driving the servo signal wire"
+  ledc_channel:
+    type: int
+    default: 0
+    description: "LEDC channel (0-7)"
+  min_pulse_us:
+    type: int
+    default: 500
+    description: "Pulse width at angle 0"
+  max_pulse_us:
+    type: int
+    default: 2500
+    description: "Pulse width at max_angle"
+  max_angle:
+    type: int
+    default: 180
+    description: "Maximum commandable angle in degrees"
+  home_angle:
+    type: int
+    default: 0
+    description: "Angle to return to after a rotate command completes its hold"
+  idle_detach:
+    type: bool
+    default: true
+    description: "Stop the LEDC signal ~500ms after motion completes to prevent hum/jitter; re-attaches on next move"
+
+esp_idf_components:
+  - driver
+
+compatible_targets:
+  - esp32s3
+  - esp32c3
+  - esp32c6

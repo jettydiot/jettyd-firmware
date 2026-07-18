@@ -1,0 +1,26 @@
+{
+  "driver": "servo",
+  "description": "LEDC-based hobby servo actuator, 50 Hz",
+  "type": "actuator",
+  "telemetry": {
+    "{instance}.angle": { "type": "number" }
+  },
+  "commands": {
+    "rotate": {
+      "description": "Move to angle, hold, then return to home_angle",
+      "params": {
+        "angle": { "type": "number", "default": 90, "description": "Target angle in degrees" },
+        "hold_ms": { "type": "integer", "default": 1000, "description": "Hold duration before returning home" }
+      }
+    }
+  },
+  "config": {
+    "pin": { "type": "integer", "required": true },
+    "ledc_channel": { "type": "integer", "default": 0 },
+    "min_pulse_us": { "type": "integer", "default": 500 },
+    "max_pulse_us": { "type": "integer", "default": 2500 },
+    "max_angle": { "type": "integer", "default": 180 },
+    "home_angle": { "type": "integer", "default": 0 },
+    "idle_detach": { "type": "boolean", "default": true, "description": "Detach LEDC signal ~500ms after motion completes" }
+  }
+}
