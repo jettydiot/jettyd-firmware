@@ -4,6 +4,7 @@
  */
 
 #include "jettyd_provision.h"
+#include "jettyd.h"
 #include "sdkconfig.h"
 #include "jettyd_nvs.h"
 #include "jettyd_mqtt.h"
@@ -191,12 +192,20 @@ esp_err_t jettyd_provision_run(void)
     snprintf(mac_str, sizeof(mac_str), "%02x:%02x:%02x:%02x:%02x:%02x",
              mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
-    static char json_buf[256];
+    /* Device display name: the device.yaml name travels in jettyd_config_t
+     * (device_type); fall back to the Kconfig slug when unset. */
+    const jettyd_config_t *cfg = jettyd_get_config();
+    const char *name = (cfg != NULL && cfg->device_type != NULL && cfg->device_type[0] != '\0')
+                           ? cfg->device_type
+                           : CONFIG_JETTYD_DEVICE_TYPE;
+
+    static char json_buf[384];
     snprintf(json_buf, sizeof(json_buf),
-        "{\"fleet_token\":\"%s\",\"device_type\":\"%s\","
+        "{\"fleet_token\":\"%s\",\"device_type\":\"%s\",\"name\":\"%s\","
         "\"firmware_version\":\"%s\",\"mac_address\":\"%s\"}",
         s_state.fleet_token,
         CONFIG_JETTYD_DEVICE_TYPE,
+        name,
         CONFIG_JETTYD_FIRMWARE_VERSION,
         mac_str);
 

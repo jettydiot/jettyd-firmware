@@ -7,7 +7,7 @@ drivers:
   - name: servo
     instance: "servo"
     config:
-      pin: 2
+      pin: 3
       ledc_channel: 0
       min_pulse_us: 500
       max_pulse_us: 2500
