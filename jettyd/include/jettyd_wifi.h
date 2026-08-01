@@ -51,10 +51,43 @@ esp_err_t jettyd_wifi_connect(void);
 /**
  * @brief Connect with explicit credentials.
  *
+ * Applies the given credentials and initiates the association. This does not
+ * block until connected — pair it with jettyd_wifi_wait_connected() to wait
+ * for a result. Used both at boot and by jettyd_wifi_reconfigure().
+ *
  * @param ssid     WiFi SSID.
  * @param password WiFi password.
  */
 esp_err_t jettyd_wifi_connect_with(const char *ssid, const char *password);
+
+/**
+ * @brief Block until WiFi reaches JETTYD_WIFI_CONNECTED or the timeout elapses.
+ *
+ * @param timeout_ms Maximum time to wait, in milliseconds. 0 waits forever.
+ * @return ESP_OK if connected, ESP_ERR_TIMEOUT if the timeout elapsed first.
+ */
+esp_err_t jettyd_wifi_wait_connected(uint32_t timeout_ms);
+
+/**
+ * @brief Update WiFi credentials at runtime and reconnect, with rollback.
+ *
+ * Holds the current credentials in RAM, writes the new SSID/password to the
+ * provisioning NVS keys (wifi_ssid / wifi_pass in namespace jettyd_prov),
+ * disconnects and reconnects to the new network. If the new network does not
+ * reach JETTYD_WIFI_CONNECTED within @p timeout_ms, the previous credentials
+ * are restored to NVS and the device reconnects to the previous network.
+ *
+ * The provisioning identity keys (device_key, fleet_token, tenant_id) are
+ * never touched. An empty or NULL password means an open network.
+ *
+ * @param ssid       New SSID (1..32 bytes).
+ * @param password   New password (0..64 bytes); empty/NULL for an open network.
+ * @param timeout_ms Time to wait for the new network before rolling back.
+ * @return ESP_OK on success, ESP_ERR_INVALID_ARG / ESP_ERR_INVALID_SIZE for an
+ *         invalid payload (no NVS write), ESP_FAIL if the switch failed and the
+ *         previous network was restored.
+ */
+esp_err_t jettyd_wifi_reconfigure(const char *ssid, const char *password, uint32_t timeout_ms);
 
 /**
  * @brief Disconnect from WiFi.
