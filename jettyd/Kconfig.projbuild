@@ -39,4 +39,13 @@ menu "jettyd configuration"
             Device type slug from api.jettyd.com/v1/device-types.
             Used during provisioning to identify the hardware.
 
+    config JETTYD_WIFI_SET_TIMEOUT_MS
+        int "wifi.set reconnect timeout (ms)"
+        default 30000
+        range 5000 120000
+        help
+            How long the `wifi.set` device command waits for the new network to
+            reach a connected state before rolling back to the previous WiFi
+            credentials and reporting failure.
+
 endmenu

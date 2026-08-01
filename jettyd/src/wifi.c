@@ -27,6 +27,7 @@ static const char *TAG = "jettyd_wifi";
 static EventGroupHandle_t s_wifi_event_group;
 static volatile jettyd_wifi_state_t s_state = JETTYD_WIFI_DISCONNECTED;
 static volatile int s_retry_count = 0;
+static bool s_wifi_started = false;
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                 int32_t event_id, void *event_data)
@@ -100,7 +101,13 @@ esp_err_t jettyd_wifi_connect(void)
         return ESP_ERR_INVALID_STATE;
     }
 
-    return jettyd_wifi_connect_with(prov->wifi_ssid, prov->wifi_pass);
+    esp_err_t err = jettyd_wifi_connect_with(prov->wifi_ssid, prov->wifi_pass);
+    if (err != ESP_OK) {
+        return err;
+    }
+    /* Boot path: block until connected (the retry/backoff handler keeps trying
+     * indefinitely, so this returns only once the network is up). */
+    return jettyd_wifi_wait_connected(0);
 }
 
 esp_err_t jettyd_wifi_connect_with(const char *ssid, const char *password)
@@ -116,22 +123,40 @@ esp_err_t jettyd_wifi_connect_with(const char *ssid, const char *password)
     }
     wifi_config.sta.threshold.authmode = (password && password[0]) ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
 
+    /* Fresh attempt: clear prior result bits and reset the backoff counter so a
+     * runtime reconfigure doesn't inherit the previous network's retry state. */
+    xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
+    s_retry_count = 0;
+    s_state = JETTYD_WIFI_CONNECTING;
+
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
-    ESP_ERROR_CHECK(esp_wifi_start());
+
+    /* On first bring-up esp_wifi_start() emits WIFI_EVENT_STA_START, whose
+     * handler calls esp_wifi_connect(). On a subsequent runtime reconfigure the
+     * driver is already started (so no STA_START fires) — associate directly
+     * with the freshly applied config instead. */
+    if (!s_wifi_started) {
+        ESP_ERROR_CHECK(esp_wifi_start());
+        s_wifi_started = true;
+    } else {
+        esp_wifi_connect();
+    }
 
     ESP_LOGI(TAG, "Connecting to SSID: %s", ssid);
+    return ESP_OK;
+}
 
-    /* Wait for connection or failure */
+esp_err_t jettyd_wifi_wait_connected(uint32_t timeout_ms)
+{
+    TickType_t ticks = (timeout_ms == 0) ? portMAX_DELAY : pdMS_TO_TICKS(timeout_ms);
     EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
         WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-        pdFALSE, pdFALSE, portMAX_DELAY);
+        pdFALSE, pdFALSE, ticks);
 
     if (bits & WIFI_CONNECTED_BIT) {
         return ESP_OK;
     }
-
-    s_state = JETTYD_WIFI_FAILED;
-    return ESP_FAIL;
+    return ESP_ERR_TIMEOUT;
 }
 
 esp_err_t jettyd_wifi_disconnect(void)
@@ -250,14 +275,76 @@ bool jettyd_wifi_is_connected(void)
 #include "jettyd_provision.h"
 #include <string.h>
 
-/* TODO(FLU-163): real rollback state machine lands in the implementation
- * commit. This placeholder exists so the new host tests compile and fail. */
+/** Maximum accepted SSID / password lengths (802.11 limits). */
+#define JETTYD_WIFI_SSID_MAX 32
+#define JETTYD_WIFI_PASS_MAX 64
+
+/* Persist WiFi credentials to the existing provisioning NVS keys. Writing only
+ * these two keys keeps device_key / fleet_token / tenant_id untouched. An empty
+ * password writes an empty string, which is what an open network needs. */
+static esp_err_t wifi_persist_creds(const char *ssid, const char *pass)
+{
+    esp_err_t err = jettyd_nvs_write_str(JETTYD_PROV_NVS_NAMESPACE,
+                                         JETTYD_PROV_KEY_WIFI_SSID, ssid);
+    if (err != ESP_OK) {
+        return err;
+    }
+    return jettyd_nvs_write_str(JETTYD_PROV_NVS_NAMESPACE,
+                                JETTYD_PROV_KEY_WIFI_PASS, pass);
+}
+
 esp_err_t jettyd_wifi_reconfigure(const char *ssid, const char *password, uint32_t timeout_ms)
 {
-    (void)ssid;
-    (void)password;
-    (void)timeout_ms;
-    return ESP_ERR_INVALID_STATE;
+    /* Validate the payload before touching NVS. */
+    if (ssid == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    size_t ssid_len = strlen(ssid);
+    if (ssid_len == 0 || ssid_len > JETTYD_WIFI_SSID_MAX) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    const char *pass = (password != NULL) ? password : "";
+    if (strlen(pass) > JETTYD_WIFI_PASS_MAX) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    /* Hold the current credentials in RAM so we can roll back. */
+    const jettyd_provision_state_t *cur = jettyd_provision_get_state();
+    if (cur == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    char old_ssid[JETTYD_WIFI_SSID_MAX + 1];
+    char old_pass[JETTYD_WIFI_PASS_MAX + 1];
+    strlcpy(old_ssid, cur->wifi_ssid, sizeof(old_ssid));
+    strlcpy(old_pass, cur->wifi_pass, sizeof(old_pass));
+
+    ESP_LOGI(TAG, "wifi.set: switching to SSID '%s' (timeout %u ms)",
+             ssid, (unsigned)timeout_ms);
+
+    /* Commit the new credentials, then switch networks. */
+    esp_err_t err = wifi_persist_creds(ssid, pass);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "wifi.set: NVS write failed (%s)", esp_err_to_name(err));
+        return err;
+    }
+
+    jettyd_wifi_disconnect();
+    jettyd_wifi_connect_with(ssid, pass);
+    if (jettyd_wifi_wait_connected(timeout_ms) == ESP_OK) {
+        ESP_LOGI(TAG, "wifi.set: connected to '%s'", ssid);
+        return ESP_OK;
+    }
+
+    /* New network unreachable within the timeout — restore the previous one. */
+    ESP_LOGW(TAG, "wifi.set: '%s' unreachable within %u ms — rolling back to '%s'",
+             ssid, (unsigned)timeout_ms, old_ssid);
+    wifi_persist_creds(old_ssid, old_pass);
+    jettyd_wifi_disconnect();
+    jettyd_wifi_connect_with(old_ssid, old_pass);
+    /* Best-effort: wait for the previous network to come back. The radio keeps
+     * retrying with backoff regardless, so we don't fail on this wait. */
+    jettyd_wifi_wait_connected(timeout_ms);
+    return ESP_FAIL;
 }
 
 #endif /* CONFIG_SOC_WIFI_SUPPORTED || JETTYD_WIFI_HOST_TEST */
