@@ -162,6 +162,13 @@ bool jettyd_wifi_is_connected(void)
     return s_state == JETTYD_WIFI_CONNECTED;
 }
 
+#elif defined(JETTYD_WIFI_HOST_TEST)
+
+/* Host unit-test build: the WiFi radio, NVS and provisioning seams are supplied
+ * by the test harness. Only jettyd_wifi_reconfigure() (shared block below) is
+ * compiled from this translation unit so its rollback logic can be exercised
+ * against controllable stubs. */
+
 #else /* !CONFIG_SOC_WIFI_SUPPORTED */
 
 static bool s_warned = false;
@@ -193,6 +200,20 @@ esp_err_t jettyd_wifi_connect_with(const char *ssid, const char *password)
     return ESP_ERR_NOT_SUPPORTED;
 }
 
+esp_err_t jettyd_wifi_wait_connected(uint32_t timeout_ms)
+{
+    (void)timeout_ms;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+esp_err_t jettyd_wifi_reconfigure(const char *ssid, const char *password, uint32_t timeout_ms)
+{
+    (void)ssid;
+    (void)password;
+    (void)timeout_ms;
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
 esp_err_t jettyd_wifi_disconnect(void)
 {
     return ESP_OK;
@@ -214,3 +235,29 @@ bool jettyd_wifi_is_connected(void)
 }
 
 #endif /* CONFIG_SOC_WIFI_SUPPORTED */
+
+/* ─────────────────────────── wifi.set / reconfigure ─────────────────────────
+ * Runtime WiFi credential update with rollback (FLU-163). The logic here is
+ * radio-independent: it validates the payload, persists credentials to NVS,
+ * and drives the connect/rollback sequence through the WiFi seams declared in
+ * jettyd_wifi.h. It is shared by the real target and the host unit-test build
+ * (which supplies those seams as stubs). Radio-less targets get the
+ * ESP_ERR_NOT_SUPPORTED stub above instead.
+ */
+#if CONFIG_SOC_WIFI_SUPPORTED || defined(JETTYD_WIFI_HOST_TEST)
+
+#include "jettyd_nvs.h"
+#include "jettyd_provision.h"
+#include <string.h>
+
+/* TODO(FLU-163): real rollback state machine lands in the implementation
+ * commit. This placeholder exists so the new host tests compile and fail. */
+esp_err_t jettyd_wifi_reconfigure(const char *ssid, const char *password, uint32_t timeout_ms)
+{
+    (void)ssid;
+    (void)password;
+    (void)timeout_ms;
+    return ESP_ERR_INVALID_STATE;
+}
+
+#endif /* CONFIG_SOC_WIFI_SUPPORTED || JETTYD_WIFI_HOST_TEST */
