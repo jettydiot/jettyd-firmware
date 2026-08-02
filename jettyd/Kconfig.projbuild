@@ -48,6 +48,40 @@ menu "jettyd configuration"
             reach a connected state before rolling back to the previous WiFi
             credentials and reporting failure.
 
+    config JETTYD_DISPLAY_PIN_DIN
+        int "Display DIN pin (GPIO)"
+        default 10
+        help
+            GPIO pin connected to the MAX7219 DIN (data in) line.
+
+    config JETTYD_DISPLAY_PIN_CLK
+        int "Display CLK pin (GPIO)"
+        default 8
+        help
+            GPIO pin connected to the MAX7219 CLK line.
+
+    config JETTYD_DISPLAY_PIN_CS
+        int "Display CS/LOAD pin (GPIO)"
+        default 9
+        help
+            GPIO pin connected to the MAX7219 CS (LOAD) line.
+            Note: the FC16 reference wiring diagram shows GPIO20 but the
+            reference sketch code uses GPIO9 — default is 9, reconfigure as needed.
+
+    config JETTYD_DISPLAY_MODULES
+        int "Number of daisy-chained MAX7219 modules"
+        default 4
+        range 1 4
+        help
+            Number of MAX7219 modules in the daisy chain. Each module adds 8 columns.
+            The display driver supports up to 4 modules (32x8 pixels).
+
+    config JETTYD_DISPLAY_BRIGHTNESS
+        int "Default display brightness (0-15)"
+        default 3
+        range 0 15
+        help
+            Initial MAX7219 intensity register value, 0 = minimum, 15 = maximum.
     config JETTYD_WIFI_PORTAL
         bool "Enable SoftAP fallback config portal"
         default y

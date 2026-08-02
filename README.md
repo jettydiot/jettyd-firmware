@@ -11,7 +11,7 @@ Open-source C SDK for ESP-IDF that connects ESP32 devices to [jettyd](https://je
 - **Provisioning** — auto-register devices with the jettyd platform via MQTT
 - **Telemetry** — publish sensor readings on configurable heartbeat intervals
 - **Device Shadow** — reported/desired state sync with the platform
-- **Commands** — receive and execute commands from the dashboard or AI agents, including runtime WiFi credential updates with rollback (see [docs/wifi-reconfiguration.md](docs/wifi-reconfiguration.md))
+- **Commands** — receive and execute commands from the dashboard or AI agents, including runtime WiFi credential updates with rollback (see [docs/wifi-reconfiguration.md](docs/wifi-reconfiguration.md)) and LED matrix display via [display.set](docs/display-driver.md)
 - **OTA** — over-the-air firmware updates
 - **JettyScript VM** — local rule engine (if/then logic without cloud round-trips)
 - **Driver framework** — pluggable sensor/actuator drivers with a standard interface
@@ -33,6 +33,7 @@ Open-source C SDK for ESP-IDF that connects ESP32 devices to [jettyd](https://je
 | `pwm_output` | Actuator | duty cycle (0–100%), frequency | `pwm_set_duty`, `pwm_set_freq` |
 | `rgb_led_matrix` | Actuator | pattern display | `matrix_show`, `matrix_clear` |
 | `camera` | Sensor | upload_errors | `camera_capture` |
+| `display` | Actuator | `display.set` (number/string → MAX7219 32×8) | `display_set` |
 
 ## System metrics
 

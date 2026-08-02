@@ -1,0 +1,30 @@
+{
+  "driver": "display",
+  "description": "MAX7219 LED matrix display, bit-bang SPI, FC16 4-module 32x8px layout",
+  "type": "actuator",
+  "commands": {
+    "set": {
+      "description": "Render a value on the LED matrix. Numbers are compacted to fit 5 chars; strings are truncated at 5 chars.",
+      "params": {
+        "value": {
+          "oneOf": [{"type": "string"}, {"type": "number"}],
+          "description": "Value to display. Negative numbers → '----'. Numbers ≥100000 are compacted (100k / 1.0M / 99M / 999M / 1B)."
+        },
+        "brightness": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15,
+          "description": "Optional: update MAX7219 intensity register (0=min, 15=max)"
+        }
+      },
+      "required": ["value"]
+    }
+  },
+  "config": {
+    "pin_din":      { "type": "integer", "required": true },
+    "pin_clk":      { "type": "integer", "required": true },
+    "pin_cs":       { "type": "integer", "required": true },
+    "num_modules":  { "type": "integer", "default": 4 },
+    "brightness":   { "type": "integer", "default": 3 }
+  }
+}

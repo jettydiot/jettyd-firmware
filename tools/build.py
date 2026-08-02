@@ -94,6 +94,9 @@ def generate_driver_init_c(config: dict, output_path: Path):
         elif name == "servo":
             cfg_init = _servo_config(drv_config)
             cfg_type = "servo_config_t"
+        elif name == "display":
+            cfg_init = _display_config(drv_config)
+            cfg_type = "display_config_t"
         else:
             print(f"Warning: Unknown driver '{name}', generating generic config")
             cfg_init = "{0}"
@@ -261,6 +264,23 @@ def _servo_config(cfg: dict) -> str:
         f'        .max_angle = {max_angle},\n'
         f'        .home_angle = {home_angle},\n'
         f'        .idle_detach = {idle_detach},\n'
+        f'    }}'
+    )
+
+
+def _display_config(cfg: dict) -> str:
+    pin_din     = cfg.get("pin_din", 10)
+    pin_clk     = cfg.get("pin_clk", 8)
+    pin_cs      = cfg.get("pin_cs", 9)
+    num_modules = cfg.get("num_modules", 4)
+    brightness  = cfg.get("brightness", 3)
+    return (
+        f'{{\n'
+        f'        .pin_din     = {pin_din},\n'
+        f'        .pin_clk     = {pin_clk},\n'
+        f'        .pin_cs      = {pin_cs},\n'
+        f'        .num_modules = {num_modules},\n'
+        f'        .brightness  = {brightness},\n'
         f'    }}'
     )
 
