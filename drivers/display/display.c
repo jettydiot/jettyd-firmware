@@ -2,8 +2,10 @@
  * @file display.c
  * @brief MAX7219 LED matrix display driver — bit-bang SPI, FC16 4-module layout.
  *
- * Commands accepted (via MQTT command topic):
- *   {"action": "display.set", "params": {"value": <string|number>, "brightness": <0-15>}}
+ * Commands accepted (via MQTT command topic). Routing is instance-based:
+ * the wire command is "<instance>.set", e.g. "display.set" when the
+ * device.yaml instance is named "display".
+ *   {"command_type": "display.set", "payload": {"value": <string|number>, "brightness": <0-15>}}
  *     Renders the value on the 32x8 pixel display.  Numeric values are
  *     compacted to fit ~5 characters; strings are truncated at 5 chars.
  *     Negative numbers render as "----".  Optional brightness updates the

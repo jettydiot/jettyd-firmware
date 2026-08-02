@@ -5,7 +5,7 @@ description: "MAX7219 LED matrix display demo — 4-module FC16 layout, display.
 
 drivers:
   - name: display
-    instance: "panel"
+    instance: "display"
     config:
       pin_din: 10
       pin_clk: 8
