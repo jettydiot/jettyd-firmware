@@ -1,0 +1,31 @@
+name: display
+description: "MAX7219 LED matrix display driver — bit-bang SPI, FC16 4-module layout, display.set command"
+category: actuator
+capabilities: []
+
+config_schema:
+  pin_din:
+    type: int
+    required: true
+    description: "GPIO pin for SPI DIN (data in)"
+  pin_clk:
+    type: int
+    required: true
+    description: "GPIO pin for SPI CLK"
+  pin_cs:
+    type: int
+    required: true
+    description: "GPIO pin for SPI CS (LOAD)"
+  num_modules:
+    type: int
+    default: 4
+    description: "Number of daisy-chained MAX7219 modules (1–4)"
+  brightness:
+    type: int
+    default: 3
+    description: "Initial intensity 0–15"
+
+compatible_targets:
+  - esp32s3
+  - esp32c3
+  - esp32c6

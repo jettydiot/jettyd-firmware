@@ -1,0 +1,36 @@
+name: "display-demo-v1"
+version: "1.0.0"
+target: "esp32c3"
+description: "MAX7219 LED matrix display demo — 4-module FC16 layout, display.set command"
+
+drivers:
+  - name: display
+    instance: "panel"
+    config:
+      pin_din: 10
+      pin_clk: 8
+      pin_cs: 9
+      num_modules: 4
+      brightness: 3
+
+defaults:
+  heartbeat_interval: 60
+  report_metrics:
+    - "system.rssi"
+
+mqtt:
+  keepalive: 60
+  qos: 1
+  buffer_on_disconnect: true
+  max_buffer_size: 20
+
+power:
+  deep_sleep: false
+  sleep_duration: null
+  wake_on_pin: null
+
+hardware:
+  has_battery: false
+  battery_adc_pin: -1
+  battery_voltage_divider: 1.0
+  status_led_pin: -1

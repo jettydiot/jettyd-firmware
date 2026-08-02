@@ -303,7 +303,33 @@ static void command_handler(const char *topic, const char *data, int data_len)
             status = "acked";
         }
     } else if (strcmp(cmd_action, "set") == 0) {
-        if (drv->write == NULL) {
+        /* If the driver has no WRITABLE capabilities but exposes a command hook,
+         * delegate the full set action to it (e.g. display.set). This keeps the
+         * generic set path for writable-cap drivers (servo, relay) unchanged. */
+        bool has_writable = false;
+        for (uint8_t c = 0; c < drv->capability_count; c++) {
+            if (drv->capabilities[c].type == JETTYD_CAP_WRITABLE) {
+                has_writable = true;
+                break;
+            }
+        }
+        if (!has_writable && drv->command != NULL) {
+            char *params_str = params_obj ? cJSON_PrintUnformatted(params_obj) : NULL;
+            esp_err_t err = drv->command("set", params_str);
+            if (params_str) cJSON_free(params_str);
+            if (err == ESP_OK) {
+                status = "acked";
+            } else if (err == ESP_ERR_INVALID_ARG) {
+                status = "rejected";
+                cJSON_AddStringToObject(result, "error", "Invalid params");
+            } else if (err == ESP_ERR_NOT_SUPPORTED) {
+                status = "rejected";
+                cJSON_AddStringToObject(result, "error", "Not writable");
+            } else {
+                status = "failed";
+                cJSON_AddStringToObject(result, "error", "Command execution failed");
+            }
+        } else if (drv->write == NULL) {
             status = "rejected";
             cJSON_AddStringToObject(result, "error", "Not writable");
         } else if (params_obj == NULL || !cJSON_IsObject(params_obj)) {
