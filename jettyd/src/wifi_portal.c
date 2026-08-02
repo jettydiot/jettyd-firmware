@@ -16,6 +16,7 @@
 #include "jettyd_wifi_portal.h"
 #include "sdkconfig.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -173,7 +174,6 @@ esp_err_t jettyd_portal_save_creds(const char *ssid, const char *password)
 
 #include "esp_wifi.h"
 #include "esp_netif.h"
-#include "esp_timer.h"
 #include "esp_system.h"
 #include "esp_http_server.h"
 #include "freertos/FreeRTOS.h"
