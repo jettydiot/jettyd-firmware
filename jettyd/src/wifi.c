@@ -39,6 +39,21 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         s_state = JETTYD_WIFI_CONNECTING;
         s_retry_count++;
 
+#if CONFIG_JETTYD_WIFI_PORTAL
+        /* When the portal is enabled, stop retrying at the threshold so that
+         * jettyd_wifi_connect() can return and the caller can trigger the portal. */
+#ifndef CONFIG_JETTYD_WIFI_PORTAL_FAIL_THRESHOLD
+#define CONFIG_JETTYD_WIFI_PORTAL_FAIL_THRESHOLD 5
+#endif
+        if (s_retry_count >= CONFIG_JETTYD_WIFI_PORTAL_FAIL_THRESHOLD) {
+            ESP_LOGW(TAG, "WiFi: %d consecutive failures (threshold %d) — signaling failure",
+                     s_retry_count, CONFIG_JETTYD_WIFI_PORTAL_FAIL_THRESHOLD);
+            s_state = JETTYD_WIFI_FAILED;
+            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
+            return;
+        }
+#endif /* CONFIG_JETTYD_WIFI_PORTAL */
+
         /* Exponential backoff via esp_timer — never block the event task */
         uint32_t delay_ms = JETTYD_WIFI_BACKOFF_INIT_MS;
         for (int i = 0; i < s_retry_count && delay_ms < JETTYD_WIFI_BACKOFF_MAX_MS; i++) {
@@ -187,12 +202,22 @@ bool jettyd_wifi_is_connected(void)
     return s_state == JETTYD_WIFI_CONNECTED;
 }
 
+int jettyd_wifi_get_fail_count(void)
+{
+    return s_retry_count;
+}
+
 #elif defined(JETTYD_WIFI_HOST_TEST)
 
 /* Host unit-test build: the WiFi radio, NVS and provisioning seams are supplied
  * by the test harness. Only jettyd_wifi_reconfigure() (shared block below) is
  * compiled from this translation unit so its rollback logic can be exercised
  * against controllable stubs. */
+
+int jettyd_wifi_get_fail_count(void)
+{
+    return 0;
+}
 
 #else /* !CONFIG_SOC_WIFI_SUPPORTED */
 
@@ -257,6 +282,11 @@ int8_t jettyd_wifi_get_rssi(void)
 bool jettyd_wifi_is_connected(void)
 {
     return false;
+}
+
+int jettyd_wifi_get_fail_count(void)
+{
+    return 0;
 }
 
 #endif /* CONFIG_SOC_WIFI_SUPPORTED */

@@ -111,4 +111,12 @@ int8_t jettyd_wifi_get_rssi(void);
  */
 bool jettyd_wifi_is_connected(void);
 
+/**
+ * @brief Return the number of consecutive station connection failures.
+ *
+ * Resets to 0 on a successful IP assignment. Used by the portal trigger to
+ * decide whether to summon the config AP. Returns 0 on non-WiFi targets.
+ */
+int jettyd_wifi_get_fail_count(void);
+
 #endif /* JETTYD_WIFI_H */

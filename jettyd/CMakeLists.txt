@@ -7,6 +7,7 @@ idf_component_register(
         "src/shadow.c"
         "src/nvs.c"
         "src/wifi.c"
+        "src/wifi_portal.c"
         "src/telemetry.c"
         "src/vm.c"
         "src/driver_registry.c"
@@ -22,6 +23,7 @@ idf_component_register(
         mqtt
         esp_https_ota
         esp_http_client
+        esp_http_server
         json
         mbedtls
         esp_timer
