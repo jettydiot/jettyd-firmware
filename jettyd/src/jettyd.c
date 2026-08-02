@@ -31,7 +31,11 @@
 #include "jettyd_driver.h"
 #include "jettyd_manifest.h"
 #include "jettyd_mcp.h"
+#include "jettyd_wifi_portal.h"
 #include "esp_log.h"
+#if CONFIG_JETTYD_WIFI_PORTAL && CONFIG_SOC_WIFI_SUPPORTED
+#include "driver/gpio.h"
+#endif
 #include "esp_system.h"
 #include "esp_timer.h"
 #include <time.h>
@@ -480,7 +484,56 @@ esp_err_t jettyd_start(void)
     /* Step 4: WiFi connect */
     esp_err_t err = jettyd_wifi_connect();
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "WiFi connect failed");
+        ESP_LOGE(TAG, "WiFi connect failed (%d consecutive failures)",
+                 jettyd_wifi_get_fail_count());
+
+#if CONFIG_JETTYD_WIFI_PORTAL && CONFIG_SOC_WIFI_SUPPORTED
+        {
+            const jettyd_provision_state_t *prov = jettyd_provision_get_state();
+
+            /* Arming condition (a): no SSID in NVS → fresh device */
+            bool no_ssid = (prov == NULL || prov->wifi_ssid[0] == '\0');
+
+            /* Arming condition (b): within boot window */
+            int64_t elapsed_us = esp_timer_get_time();
+            bool in_boot_window = (elapsed_us <
+                (int64_t)CONFIG_JETTYD_WIFI_PORTAL_BOOT_WINDOW_S * 1000000LL);
+
+            /* Arming condition (c): boot/user button held ≥3 s (GPIO0, active-low).
+             * A single instantaneous sample is insufficient — poll for 3 continuous
+             * seconds to distinguish a deliberate hold from a brief bounce. */
+            bool button_held_3s = false;
+            if (gpio_get_level(0) == 0) {
+                int64_t press_start = esp_timer_get_time();
+                bool continuous = true;
+                while ((esp_timer_get_time() - press_start) < 3000000LL) {
+                    vTaskDelay(pdMS_TO_TICKS(50));
+                    if (gpio_get_level(0) != 0) {
+                        continuous = false;
+                        break;
+                    }
+                }
+                button_held_3s = continuous;
+            }
+
+            bool armed   = jettyd_portal_is_armed(no_ssid, in_boot_window, button_held_3s);
+            bool trigger = jettyd_portal_should_trigger(
+                jettyd_wifi_get_fail_count(),
+                CONFIG_JETTYD_WIFI_PORTAL_FAIL_THRESHOLD,
+                armed);
+
+            if (trigger) {
+                ESP_LOGI(TAG, "Portal trigger: armed=%d (no_ssid=%d boot_window=%d btn=%d)",
+                         (int)armed, (int)no_ssid, (int)in_boot_window, (int)button_held_3s);
+                jettyd_portal_start(prov ? prov->device_id : "");
+                /* Never reached — portal always reboots */
+            } else {
+                ESP_LOGW(TAG, "WiFi failed but portal not triggered (armed=%d btn_3s=%d)",
+                         (int)armed, (int)button_held_3s);
+            }
+        }
+#endif /* CONFIG_JETTYD_WIFI_PORTAL && CONFIG_SOC_WIFI_SUPPORTED */
+
         return err;
     }
 

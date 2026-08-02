@@ -82,5 +82,43 @@ menu "jettyd configuration"
         range 0 15
         help
             Initial MAX7219 intensity register value, 0 = minimum, 15 = maximum.
+    config JETTYD_WIFI_PORTAL
+        bool "Enable SoftAP fallback config portal"
+        default y
+        help
+            When enabled, a SoftAP + embedded HTTP config portal starts when
+            station WiFi cannot connect after JETTYD_WIFI_PORTAL_FAIL_THRESHOLD
+            consecutive attempts and the portal is armed. Users connect to the
+            AP (SSID: jettyd-<id>) and open http://192.168.4.1 to enter new
+            WiFi credentials. Set to n to compile out all portal code and data.
+
+    config JETTYD_WIFI_PORTAL_FAIL_THRESHOLD
+        int "Consecutive WiFi failures before portal trigger"
+        depends on JETTYD_WIFI_PORTAL
+        default 5
+        range 1 20
+        help
+            Number of consecutive station connection failures required before
+            the config portal is considered. The portal also requires arming
+            (fresh device, boot window, or button held) to actually start.
+
+    config JETTYD_WIFI_PORTAL_BOOT_WINDOW_S
+        int "Portal arming boot window (seconds)"
+        depends on JETTYD_WIFI_PORTAL
+        default 300
+        range 30 3600
+        help
+            The portal is armed (eligible to start) for this many seconds after
+            power-on. Outside this window a WiFi jammer cannot summon the AP on
+            an unattended, long-running device unless the button is held.
+
+    config JETTYD_WIFI_PORTAL_TIMEOUT_S
+        int "Portal idle timeout (seconds)"
+        depends on JETTYD_WIFI_PORTAL
+        default 600
+        range 60 3600
+        help
+            Seconds of HTTP inactivity before the config portal stops and the
+            device reboots to resume the station retry loop.
 
 endmenu

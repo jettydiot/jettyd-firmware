@@ -89,6 +89,24 @@ Declarative rules that run on the device — no cloud needed:
 
 Original ESP32 is not supported.
 
+## Changing WiFi networks
+
+Two mechanisms are available for updating a device's WiFi credentials after
+first flash:
+
+- **`wifi.set` command** — send a command from the dashboard or an agent while
+  the device is online. The device reconnects to the new network with automatic
+  rollback if it cannot reach the new SSID within the timeout.
+- **SoftAP fallback portal** — when the device cannot connect at all (stale
+  credentials, new router), power-cycle (or wait for `CONFIG_JETTYD_WIFI_PORTAL_FAIL_THRESHOLD`
+  failures during the `CONFIG_JETTYD_WIFI_PORTAL_BOOT_WINDOW_S` boot window), connect
+  to the `jettyd-<id>` open AP from a phone or laptop, and open
+  `http://192.168.4.1` to enter new credentials.
+
+See **[docs/wifi-reconfiguration.md](docs/wifi-reconfiguration.md)** for full
+details on both mechanisms, including Kconfig options and the arming/security
+model for the portal.
+
 ## Documentation
 
 - **[QuickStart](https://docs.jettyd.com/quickstart)** — 5 minutes to first device
