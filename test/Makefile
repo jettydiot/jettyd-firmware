@@ -22,7 +22,7 @@ SDK_SRC := ../jettyd/src/driver_registry.c
 
 all: test
 
-test: build/test_drivers build/test_button build/test_manifest build/test_mcp_tools build/test_camera build/test_servo build/test_wifi_reconfigure
+test: build/test_drivers build/test_button build/test_manifest build/test_mcp_tools build/test_camera build/test_servo build/test_wifi_reconfigure build/test_wifi_portal
 	@echo ""
 	@echo "Running test_drivers..."
 	@./build/test_drivers
@@ -45,6 +45,9 @@ test: build/test_drivers build/test_button build/test_manifest build/test_mcp_to
 	@echo "Running test_wifi_reconfigure..."
 	@./build/test_wifi_reconfigure
 	@echo ""
+	@echo "Running test_wifi_portal..."
+	@./build/test_wifi_portal
+	@echo ""
 	@echo "✅ All test suites passed"
 
 build/test_drivers: test_drivers.c $(SDK_SRC) | build
@@ -57,6 +60,9 @@ build/test_servo: test_servo.c | build
 	$(CC) $(CFLAGS) -o $@ $<
 
 build/test_wifi_reconfigure: test_wifi_reconfigure.c ../jettyd/src/wifi.c | build
+	$(CC) $(CFLAGS) -o $@ $<
+
+build/test_wifi_portal: test_wifi_portal.c ../jettyd/src/wifi_portal.c | build
 	$(CC) $(CFLAGS) -o $@ $<
 
 build/test_manifest: test_manifest.c $(SDK_SRC) | build
