@@ -27,5 +27,6 @@ void app_main(void)
     };
 
     jettyd_init(&config);
+    jettyd_register_drivers();
     jettyd_start();
 }

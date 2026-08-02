@@ -38,6 +38,7 @@ static esp_err_t stub_nvs_set_str(unsigned int h, const char *k, const char *v)
 
 static int s_passed = 0;
 static int s_failed = 0;
+static bool s_meta_fail_active = false;
 
 #define TEST(name)  static void test_##name(void)
 #define RUN_TEST(name) do { \
@@ -45,11 +46,13 @@ static int s_failed = 0;
     _reset_display_state(); \
     _default_cfg(); \
     s_nvs_write_calls = 0; \
+    int _failed_before = s_failed; \
     test_##name(); \
     if (s_nvs_write_calls != 0) { \
         printf("FAIL: unexpected NVS write(s) detected\n"); \
         s_failed++; \
-    } else { \
+    } \
+    if (s_failed == _failed_before) { \
         printf("--- %s: done ---\n", #name); \
         s_passed++; \
     } \
@@ -333,6 +336,18 @@ TEST(numeric_value_accepted) {
     ASSERT_EQ(err, ESP_OK);
 }
 
+/* ── RUN_TEST macro self-check ───────────────────────────────────────────── */
+/*
+ * Verifies that a test body that fails via ASSERT_TRUE does NOT also
+ * increment s_passed (the pre-fix bug: s_nvs_write_calls==0 would
+ * trigger the else-branch even after s_failed was already bumped).
+ * Only active when s_meta_fail_active is set; run before the real suite.
+ */
+
+TEST(meta_fail) {
+    ASSERT_TRUE(!s_meta_fail_active);
+}
+
 /* ── identity NVS keys untouched ─────────────────────────────────────────── */
 
 TEST(nvs_identity_keys_untouched) {
@@ -356,6 +371,22 @@ int main(void)
     printf("═══════════════════════════════════════\n");
     printf("  Display Driver Unit Tests\n");
     printf("═══════════════════════════════════════\n");
+
+    /* Verify RUN_TEST macro: a failing test body must not also increment
+     * s_passed.  Undoes the deliberate failure if the macro is correct. */
+    {
+        int p0 = s_passed, f0 = s_failed;
+        s_meta_fail_active = true;
+        RUN_TEST(meta_fail);
+        s_meta_fail_active = false;
+        if (s_passed == p0 && s_failed == f0 + 1) {
+            s_failed = f0; /* correct — undo the deliberate failure */
+            printf("  [macro check: RUN_TEST correctly counts failing test as failed only]\n");
+        } else {
+            printf("FAIL: RUN_TEST double-count regression detected\n");
+            s_passed = p0; /* remove any spurious pass */
+        }
+    }
 
     RUN_TEST(compact_zero);
     RUN_TEST(compact_99999);
