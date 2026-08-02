@@ -403,6 +403,69 @@ TEST(make_ap_ssid_null_device_id_fallback) {
     PASS();
 }
 
+/* ── JSON SSID escaping (finding 3) ──────────────────────────────────────── */
+
+TEST(json_escape_plain_ssid) {
+    char out[200];
+    json_escape_ssid("PlainNet", out, sizeof(out));
+    ASSERT_STR_EQ(out, "PlainNet");
+    PASS();
+}
+
+TEST(json_escape_ssid_double_quote) {
+    char out[200];
+    json_escape_ssid("Net\"Work", out, sizeof(out));
+    ASSERT_STR_EQ(out, "Net\\\"Work");
+    PASS();
+}
+
+TEST(json_escape_ssid_backslash) {
+    char out[200];
+    json_escape_ssid("Net\\Work", out, sizeof(out));
+    ASSERT_STR_EQ(out, "Net\\\\Work");
+    PASS();
+}
+
+TEST(json_escape_ssid_control_char_tab) {
+    char out[200];
+    json_escape_ssid("Net\x09Work", out, sizeof(out)); /* TAB = 0x09 */
+    ASSERT_STR_EQ(out, "Net\\u0009Work");
+    PASS();
+}
+
+TEST(json_escape_ssid_control_char_newline) {
+    char out[200];
+    json_escape_ssid("A\nB", out, sizeof(out)); /* LF = 0x0a */
+    ASSERT_STR_EQ(out, "A\\u000aB");
+    PASS();
+}
+
+TEST(json_escape_ssid_both_quote_and_backslash) {
+    char out[200];
+    json_escape_ssid("a\"b\\c", out, sizeof(out));
+    ASSERT_STR_EQ(out, "a\\\"b\\\\c");
+    PASS();
+}
+
+/* ── POST body max-length handling (finding 4) ───────────────────────────── */
+
+TEST(parse_body_max_length_ssid_and_password) {
+    /* Verify parse_post_body works at the maximum legitimate field sizes.
+     * The HTTP save_post_handler rejects content_len >= 256 before calling
+     * this function, so valid requests always fit in a 255-byte body. */
+    char ssid[33] = {0}, pass[65] = {0};
+    char long_ssid[33], long_pass[65];
+    memset(long_ssid, 'a', 32); long_ssid[32] = '\0';
+    memset(long_pass, 'b', 64); long_pass[64] = '\0';
+    char body[256];
+    int n = snprintf(body, sizeof(body), "ssid=%s&password=%s", long_ssid, long_pass);
+    esp_err_t err = jettyd_portal_parse_post_body(body, (size_t)n, ssid, pass);
+    ASSERT_EQ(err, ESP_OK);
+    ASSERT_STR_EQ(ssid, long_ssid);
+    ASSERT_STR_EQ(pass, long_pass);
+    PASS();
+}
+
 /* ── Idle timeout ──────────────────────────────────────────────────────────── */
 
 TEST(idle_timeout_elapsed_returns_true) {
@@ -478,6 +541,17 @@ int main(void)
     RUN_TEST(idle_timeout_elapsed_returns_true);
     RUN_TEST(idle_timeout_recent_activity_returns_false);
     RUN_TEST(idle_timeout_exactly_at_boundary);
+
+    /* JSON SSID escaping (finding 3) */
+    RUN_TEST(json_escape_plain_ssid);
+    RUN_TEST(json_escape_ssid_double_quote);
+    RUN_TEST(json_escape_ssid_backslash);
+    RUN_TEST(json_escape_ssid_control_char_tab);
+    RUN_TEST(json_escape_ssid_control_char_newline);
+    RUN_TEST(json_escape_ssid_both_quote_and_backslash);
+
+    /* POST body max-length (finding 4) */
+    RUN_TEST(parse_body_max_length_ssid_and_password);
 
     printf("\n═══════════════════════════════════════\n");
     printf("  Results: %d passed, %d failed\n", s_passed, s_failed);

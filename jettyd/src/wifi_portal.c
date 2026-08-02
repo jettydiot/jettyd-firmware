@@ -149,6 +149,28 @@ bool jettyd_portal_is_timed_out(int64_t last_activity_us, uint32_t timeout_s)
 #include "jettyd_nvs.h"
 #include "jettyd_provision.h"
 
+/* JSON-escape ssid into out: escapes '"', '\', and ASCII control chars (<0x20). */
+static void json_escape_ssid(const char *ssid, char *out, size_t out_size)
+{
+    if (out_size == 0) return;
+    size_t j = 0;
+    for (const char *p = ssid; *p; p++) {
+        unsigned char c = (unsigned char)*p;
+        if (c == '"' || c == '\\') {
+            if (j + 2 >= out_size) break;
+            out[j++] = '\\';
+            out[j++] = (char)c;
+        } else if (c < 0x20) {
+            if (j + 6 >= out_size) break;
+            j += (size_t)snprintf(out + j, out_size - j, "\\u%04x", (unsigned)c);
+        } else {
+            if (j + 1 >= out_size) break;
+            out[j++] = (char)c;
+        }
+    }
+    out[j] = '\0';
+}
+
 esp_err_t jettyd_portal_save_creds(const char *ssid, const char *password)
 {
     esp_err_t err = jettyd_portal_validate_creds(ssid, password);
@@ -171,6 +193,10 @@ esp_err_t jettyd_portal_save_creds(const char *ssid, const char *password)
 /* ── SoftAP + HTTP server (on-target, portal enabled) ──────────────────── */
 
 #if CONFIG_JETTYD_WIFI_PORTAL && CONFIG_SOC_WIFI_SUPPORTED
+
+#ifndef CONFIG_JETTYD_WIFI_PORTAL_TIMEOUT_S
+#define CONFIG_JETTYD_WIFI_PORTAL_TIMEOUT_S 600
+#endif
 
 #include "esp_wifi.h"
 #include "esp_netif.h"
@@ -281,9 +307,11 @@ static esp_err_t scan_get_handler(httpd_req_t *req)
         if (i > 0) {
             n += snprintf(buf + n, sizeof(buf) - n, ",");
         }
+        char escaped[200]; /* SSID ≤ 32 chars × 6 bytes worst-case (\\uXXXX) */
+        json_escape_ssid(s_scan_cache[i].ssid, escaped, sizeof(escaped));
         n += snprintf(buf + n, sizeof(buf) - n,
                       "{\"ssid\":\"%s\",\"rssi\":%d,\"auth\":%d}",
-                      s_scan_cache[i].ssid,
+                      escaped,
                       s_scan_cache[i].rssi,
                       s_scan_cache[i].authmode);
     }
@@ -299,18 +327,34 @@ static esp_err_t save_post_handler(httpd_req_t *req)
     s_last_activity_us = esp_timer_get_time();
 
     char body[256] = {0};
-    int received = httpd_req_recv(req, body, sizeof(body) - 1);
-    if (received <= 0) {
+
+    /* Reject oversized or empty bodies before reading */
+    if (req->content_len == 0 || req->content_len >= sizeof(body)) {
         httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_set_type(req, "text/html");
         httpd_resp_send(req, PORTAL_ERROR_HTML, (int)strlen(PORTAL_ERROR_HTML));
         return ESP_OK;
     }
-    body[received] = '\0';
+
+    /* Loop until all declared bytes are received */
+    size_t to_read = (size_t)req->content_len;
+    size_t total = 0;
+    while (total < to_read) {
+        int r = httpd_req_recv(req, body + total, to_read - total);
+        if (r <= 0) {
+            httpd_resp_set_status(req, "400 Bad Request");
+            httpd_resp_set_type(req, "text/html");
+            httpd_resp_send(req, PORTAL_ERROR_HTML, (int)strlen(PORTAL_ERROR_HTML));
+            return ESP_OK;
+        }
+        total += (size_t)r;
+    }
+    body[total] = '\0';
 
     char ssid[JETTYD_PORTAL_SSID_MAX + 1] = {0};
     char pass[JETTYD_PORTAL_PASS_MAX + 1] = {0};
 
-    esp_err_t err = jettyd_portal_parse_post_body(body, (size_t)received, ssid, pass);
+    esp_err_t err = jettyd_portal_parse_post_body(body, total, ssid, pass);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Portal: invalid credentials in POST body");
         httpd_resp_set_status(req, "400 Bad Request");
@@ -394,10 +438,6 @@ esp_err_t jettyd_portal_start(const char *device_id)
     httpd_register_uri_handler(s_server, &uri_root);
     httpd_register_uri_handler(s_server, &uri_scan);
     httpd_register_uri_handler(s_server, &uri_save);
-
-#ifndef CONFIG_JETTYD_WIFI_PORTAL_TIMEOUT_S
-#define CONFIG_JETTYD_WIFI_PORTAL_TIMEOUT_S 600
-#endif
 
     /* Block until credentials saved (→ reboot) or idle timeout (→ reboot) */
     while (!s_reboot_requested) {
