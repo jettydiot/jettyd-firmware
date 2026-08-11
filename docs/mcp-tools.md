@@ -129,7 +129,7 @@ esp_err_t jettyd_mcp_serialize_tools_list(char *buf, size_t buf_len);
 esp_err_t jettyd_mcp_handle_call(const char *payload, int payload_len);
 ```
 
-## Included tools (all 11 drivers)
+## Included tools
 
 | Driver | Tool name | Description | Input params |
 |--------|-----------|-------------|--------------|
@@ -149,6 +149,9 @@ esp_err_t jettyd_mcp_handle_call(const char *payload, int payload_len);
 | `rgb_led_matrix` | `matrix_show` | Display pattern on matrix | `pattern` (string), `color` (string) |
 | `rgb_led_matrix` | `matrix_clear` | Clear matrix display | — |
 | `soil_moisture` | `soil_read_moisture` | Read soil moisture percentage | — |
+| `servo` | `servo_rotate` | Rotate servo to angle, hold, then return home | `angle` (number, degrees), `hold_ms` (number) |
+| `camera` | `camera_capture` | Capture a JPEG image and upload via media grant flow | — |
+| `display` | `display_set` | Set the LED matrix display value and optional brightness | `value` (any), `brightness` (integer 0–15) |
 
 ## Implementation constraints
 
