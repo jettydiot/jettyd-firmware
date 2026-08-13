@@ -12,6 +12,8 @@
  *  - brightness validation: 0/15 ok; -1/16 rejected, no fb write
  *  - missing/invalid value rejected
  *  - frame buffer maps known glyphs ('0', '1') to expected column bytes
+ *  - module chain order: a GPIO wire sniffer decodes the bit-banged SPI stream
+ *    and asserts the physical panel reads "90" (not "09") and "135" in order
  *  - identity NVS keys (fleet_token/device_key/tenant_id) untouched in all paths
  */
 
@@ -30,6 +32,76 @@ static esp_err_t stub_nvs_set_str(unsigned int h, const char *k, const char *v)
     s_nvs_write_calls++;
     return ESP_OK;
 }
+
+/* ── MAX7219 wire sniffer ────────────────────────────────────────────────── */
+/*
+ * Module ordering does not live in s_fb — the frame buffer is always
+ * left-to-right — but in the SPI byte stream: which chip a byte ends up in
+ * depends only on when it was shifted out. So intercept the bit-bang pins.
+ * Redirecting gpio_set_level() inside display.c to a spy samples DIN on every
+ * CLK rising edge and closes a frame on the CS low->high latch.
+ *
+ * Chain model (FC16 4-in-1, DIN enters at the far end of the chain): the first
+ * byte pair sent is shifted all the way through to the last chip, so pair k of
+ * a row frame is displayed by the module k places from the left.
+ */
+#define SPY_MAX_FRAMES 12
+#define SPY_MAX_BYTES  16
+
+/* Mirrors the pins in _default_cfg() below. */
+static const int SPY_PIN_DIN = 10;
+static const int SPY_PIN_CLK = 8;
+static const int SPY_PIN_CS  = 9;
+
+static uint8_t s_spy_frame[SPY_MAX_FRAMES][SPY_MAX_BYTES];
+static int     s_spy_frame_len[SPY_MAX_FRAMES];
+static int     s_spy_frames;
+static uint8_t s_spy_buf[SPY_MAX_BYTES];
+static int     s_spy_len;
+static uint8_t s_spy_acc;
+static int     s_spy_bits;
+static int     s_spy_din_level;
+
+static void spy_reset(void)
+{
+    memset(s_spy_frame, 0, sizeof(s_spy_frame));
+    memset(s_spy_frame_len, 0, sizeof(s_spy_frame_len));
+    memset(s_spy_buf, 0, sizeof(s_spy_buf));
+    s_spy_frames    = 0;
+    s_spy_len       = 0;
+    s_spy_acc       = 0;
+    s_spy_bits      = 0;
+    s_spy_din_level = 0;
+}
+
+static void spy_gpio_set_level(int pin, int level)
+{
+    if (pin == SPY_PIN_DIN) {
+        s_spy_din_level = level;
+    } else if (pin == SPY_PIN_CLK && level == 1) {
+        s_spy_acc = (uint8_t)((s_spy_acc << 1) | (s_spy_din_level & 1));
+        if (++s_spy_bits == 8) {
+            if (s_spy_len < SPY_MAX_BYTES) s_spy_buf[s_spy_len++] = s_spy_acc;
+            s_spy_acc  = 0;
+            s_spy_bits = 0;
+        }
+    } else if (pin == SPY_PIN_CS) {
+        if (level == 0) {                 /* CS low — a new frame starts */
+            s_spy_len  = 0;
+            s_spy_bits = 0;
+            s_spy_acc  = 0;
+        } else if (s_spy_len > 0 && s_spy_frames < SPY_MAX_FRAMES) {
+            memcpy(s_spy_frame[s_spy_frames], s_spy_buf, (size_t)s_spy_len);
+            s_spy_frame_len[s_spy_frames] = s_spy_len;
+            s_spy_frames++;
+            s_spy_len = 0;
+        }
+    }
+    /* Parenthesised so this never re-enters the macro defined below. */
+    (gpio_set_level)((gpio_num_t)pin, (uint32_t)level);
+}
+
+#define gpio_set_level(pin, level) spy_gpio_set_level((int)(pin), (int)(level))
 
 #include "display.h"
 #include "../drivers/display/display.c"
@@ -92,6 +164,35 @@ static bool pixel_lit(int row, int col)
     int module = col / 8;
     int bit    = 7 - (col % 8);
     return (s_fb[row][module] >> bit) & 1;
+}
+
+/* The 8-byte frame the chain latched for MAX7219 digit register `row`+1.
+ * Register frames (decode 0x09, intensity 0x0A, scanlimit 0x0B, shutdown 0x0C,
+ * displaytest 0x0F) can never collide — digit registers are 0x01..0x08. */
+static const uint8_t *spy_row_frame(int row)
+{
+    for (int f = 0; f < s_spy_frames; f++) {
+        if (s_spy_frame_len[f] == 8 && s_spy_frame[f][0] == (uint8_t)(row + 1)) {
+            return s_spy_frame[f];
+        }
+    }
+    return NULL;
+}
+
+/* Data byte latched by the physical module at `pos` (0 = leftmost), or -1. */
+static int spy_panel_byte(int row, int pos)
+{
+    const uint8_t *f = spy_row_frame(row);
+    if (f == NULL) return -1;
+    return f[pos * 2 + 1];
+}
+
+/* Is pixel (row, x) lit on the physical 32x8 panel, as wired? */
+static bool spy_panel_pixel(int row, int x)
+{
+    int byte = spy_panel_byte(row, x / 8);
+    if (byte < 0) return false;
+    return (byte >> (7 - (x % 8))) & 1;
 }
 
 /* ── compact_number boundaries ───────────────────────────────────────────── */
@@ -317,6 +418,72 @@ TEST(glyph_0_places_pixels_correctly) {
     ASSERT_TRUE( pixel_lit(6, 14));   /* 0x51 bit 6 = 1 */
 }
 
+/* ── module chain order ──────────────────────────────────────────────────── */
+
+TEST(row_frames_reach_modules_left_to_right) {
+    spy_reset();
+    ASSERT_EQ(display_command("set", "{\"value\": 90}"), ESP_OK);
+
+    for (int row = 0; row < 8; row++) {
+        const uint8_t *f = spy_row_frame(row);
+        ASSERT_TRUE(f != NULL);               /* all 8 digit registers written */
+        for (int pos = 0; pos < 4; pos++) {
+            ASSERT_EQ(f[pos * 2], (uint8_t)(row + 1));  /* digit reg per chip */
+            /* Pair `pos` lands in the module `pos` places from the left, so it
+             * must carry that module's frame-buffer byte — unswapped. */
+            ASSERT_EQ(f[pos * 2 + 1], s_fb[row][pos]);
+        }
+    }
+}
+
+TEST(panel_shows_90_not_09) {
+    spy_reset();
+    ASSERT_EQ(display_command("set", "{\"value\": 90}"), ESP_OK);
+
+    /*
+     * "90" is 2 chars → pixel_width 11, x_start = (32 - 11) / 2 = 10, so '9'
+     * occupies x 10..14 (module 1) and '0' x 16..20 (module 2). Checked against
+     * the font rather than against s_fb: a reversed chain swaps those two
+     * modules and the panel reads "09".
+     */
+    const uint8_t *nine = font_glyph('9');
+    const uint8_t *zero = font_glyph('0');
+    for (int col = 0; col < 5; col++) {
+        for (int row = 0; row < 8; row++) {
+            bool nine_on = ((nine[col] >> row) & 1) != 0;
+            bool zero_on = ((zero[col] >> row) & 1) != 0;
+            ASSERT_TRUE(spy_panel_pixel(row, 10 + col) == nine_on);
+            ASSERT_TRUE(spy_panel_pixel(row, 16 + col) == zero_on);
+        }
+    }
+
+    /* Outer modules stay dark — proves nothing shifted sideways. */
+    for (int row = 0; row < 8; row++) {
+        ASSERT_EQ(spy_panel_byte(row, 0), 0);
+        ASSERT_EQ(spy_panel_byte(row, 3), 0);
+    }
+}
+
+/* Asymmetric label: "135" spans three modules, so a reversed chain is visible
+ * as jumbled digit order rather than a clean mirror. */
+TEST(panel_shows_135_in_order) {
+    spy_reset();
+    ASSERT_EQ(display_command("set", "{\"value\": 135}"), ESP_OK);
+
+    /* 3 chars → pixel_width 17, x_start = (32 - 17) / 2 = 7. */
+    const char *label = "135";
+    for (int i = 0; i < 3; i++) {
+        const uint8_t *glyph = font_glyph(label[i]);
+        for (int col = 0; col < 5; col++) {
+            int x = 7 + i * 6 + col;
+            for (int row = 0; row < 8; row++) {
+                bool on = ((glyph[col] >> row) & 1) != 0;
+                ASSERT_TRUE(spy_panel_pixel(row, x) == on);
+            }
+        }
+    }
+}
+
 /* ── string value truncated to 5 chars ───────────────────────────────────── */
 
 TEST(string_value_accepted_and_truncated) {
@@ -412,6 +579,9 @@ int main(void)
     RUN_TEST(negative_value_renders_dashes);
     RUN_TEST(glyph_1_places_pixels_correctly);
     RUN_TEST(glyph_0_places_pixels_correctly);
+    RUN_TEST(row_frames_reach_modules_left_to_right);
+    RUN_TEST(panel_shows_90_not_09);
+    RUN_TEST(panel_shows_135_in_order);
     RUN_TEST(string_value_accepted_and_truncated);
     RUN_TEST(numeric_value_accepted);
     RUN_TEST(nvs_identity_keys_untouched);

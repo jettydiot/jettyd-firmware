@@ -77,7 +77,11 @@ build/test_mcp_tools: test_mcp_tools.c $(SDK_SRC) | build
 build/test_camera: test_camera.c $(SDK_SRC) | build
 	$(CC) $(CFLAGS) -DCONFIG_JETTYD_CAMERA_SUPPORTED=1 -o $@ $^
 
-build/test_display: test_display.c | build
+# test_display.c #includes the driver directly, so the driver sources are real
+# prerequisites — without them an edit to display.c leaves a stale binary and
+# the suite silently re-runs the old code. $< keeps only the .c on the command
+# line.
+build/test_display: test_display.c ../drivers/display/display.c ../drivers/display/include/display.h | build
 	$(CC) $(CFLAGS) -o $@ $<
 
 build:

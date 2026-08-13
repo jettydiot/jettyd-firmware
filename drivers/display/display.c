@@ -162,15 +162,18 @@ static void max7219_write_reg(uint8_t reg, uint8_t data)
 }
 
 /* Push the full frame buffer to the display.
- * For row r, module 0 (leftmost) is the last chip in the SPI chain — it
- * receives the last 16 bits we send, so we iterate modules in reverse order. */
+ * Module 0 (leftmost) is the last chip in the SPI chain, and in a daisy chain
+ * the bits sent *first* are shifted the furthest — through every nearer chip
+ * and into the last one. So module 0 goes out first and modules are iterated
+ * in ascending order; reversing this makes the panel read right-to-left
+ * ("90" as "09") while each glyph itself stays upright. */
 static void max7219_refresh(void)
 {
     uint8_t mods = s_cfg.num_modules > DISPLAY_MAX_MODULES
                    ? DISPLAY_MAX_MODULES : s_cfg.num_modules;
     for (int row = 0; row < 8; row++) {
         gpio_set_level((gpio_num_t)s_cfg.pin_cs, 0);
-        for (int m = (int)mods - 1; m >= 0; m--) {
+        for (int m = 0; m < (int)mods; m++) {
             spi_send_byte((uint8_t)(row + 1)); /* MAX7219 digit reg 1-8 */
             spi_send_byte(s_fb[row][m]);
         }
